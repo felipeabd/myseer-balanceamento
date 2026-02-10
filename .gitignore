@@ -3,3 +3,11 @@ dist/
 .env
 *.log
 .DS_Store
+
+# Claude Code
+.claude/
+
+# Temporary files
+nul
+*.png
+screenshot_*.png
