@@ -4,6 +4,7 @@
  */
 import 'dotenv/config';
 import express from 'express';
+import cors from 'cors';
 import { IrisAgent } from './agent/iris';
 import { createIrisRouter } from './api/router';
 
@@ -32,6 +33,13 @@ async function main() {
   });
 
   const app = express();
+
+  // Enable CORS for frontend
+  app.use(cors({
+    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    credentials: true,
+  }));
+
   app.use(express.json());
 
   // Health check

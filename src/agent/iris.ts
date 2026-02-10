@@ -19,6 +19,17 @@ export class IrisAgent {
   private rules: BalancingRule[];
   private maxToolCalls: number;
 
+  // TEMPORARY: Fixed tenant for development until multi-tenant filtering is properly implemented
+  private readonly FIXED_TENANT_ID = '33F6E320-F59E-4E43-99C2-2D6748A64B04';
+
+  /** Get tenant context with fixed tenant ID */
+  private getFixedTenant(tenant: TenantContext): TenantContext {
+    return {
+      ...tenant,
+      tenantId: this.FIXED_TENANT_ID,
+    };
+  }
+
   constructor(config: IrisConfig) {
     this.anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
     this.model = config.anthropicModel ?? 'claude-haiku-4-5-20251001';
@@ -46,7 +57,8 @@ export class IrisAgent {
       timestamp: new Date(),
     });
 
-    const systemPrompt = buildSystemPrompt(tenant, this.rules);
+    const fixedTenant = this.getFixedTenant(tenant);
+    const systemPrompt = buildSystemPrompt(fixedTenant, this.rules);
     const messages = this.buildAnthropicMessages(conv.messages);
 
     let toolCallCount = 0;
@@ -160,7 +172,8 @@ export class IrisAgent {
       timestamp: new Date(),
     });
 
-    const systemPrompt = buildSystemPrompt(tenant, this.rules);
+    const fixedTenant = this.getFixedTenant(tenant);
+    const systemPrompt = buildSystemPrompt(fixedTenant, this.rules);
     const messages = this.buildAnthropicMessages(conv.messages);
 
     let toolCallCount = 0;
@@ -189,7 +202,8 @@ export class IrisAgent {
         if (toolUseBlocks.length === 0) {
           // Final response — stream it to the client
           const text = textParts.join('\n');
-          onChunk(text, true);
+          onChunk(text, false);  // Send text first
+          onChunk('', true);      // Then send done signal
           fullResponse = text;
           break;
         }
@@ -274,7 +288,11 @@ export class IrisAgent {
   ): Promise<string> {
     if (name === 'clickhouse_query') {
       const sql = input.sql as string;
-      const rows = await this.clickhouse.query(sql, tenant);
+
+      // TEMPORARY: Override tenant with fixed tenant ID for development
+      const fixedTenant = this.getFixedTenant(tenant);
+
+      const rows = await this.clickhouse.query(sql, fixedTenant);
       return JSON.stringify(rows);
     }
     return JSON.stringify({ error: `Unknown tool: ${name}` });
