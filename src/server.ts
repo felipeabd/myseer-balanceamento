@@ -2,6 +2,7 @@
  * Standalone server for development/testing.
  * In production, use the exported router in your existing app.
  */
+import 'dotenv/config';
 import express from 'express';
 import { IrisAgent } from './agent/iris';
 import { createIrisRouter } from './api/router';
@@ -42,8 +43,8 @@ async function main() {
   app.use('/api/iris', createIrisRouter(agent));
 
   app.listen(PORT, () => {
-    console.log(`[IRIS] Server running on port ${PORT}`);
-    console.log(`[IRIS] Endpoints:`);
+    console.log(`[Iris Balanceamento] Server running on port ${PORT}`);
+    console.log(`[Iris Balanceamento] Endpoints:`);
     console.log(`  POST /api/iris/chat         - Chat (request/response)`);
     console.log(`  POST /api/iris/chat/stream   - Chat (SSE streaming)`);
     console.log(`  GET  /api/iris/conversations  - List conversations`);
@@ -51,13 +52,13 @@ async function main() {
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
-    console.log('[IRIS] Shutting down...');
+    console.log('[Iris Balanceamento] Shutting down...');
     await agent.destroy();
     process.exit(0);
   });
 }
 
 main().catch(err => {
-  console.error('[IRIS] Fatal error:', err);
+  console.error('[Iris Balanceamento] Fatal error:', err);
   process.exit(1);
 });

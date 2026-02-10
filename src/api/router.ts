@@ -36,7 +36,7 @@ export function createIrisRouter(agent: IrisAgent): Router {
         message: result.response,
       });
     } catch (err) {
-      console.error('[IRIS] Chat error:', err);
+      console.error('[Iris Balanceamento] Chat error:', err);
       res.status(500).json({
         error: 'Problemas técnicos impediram a geração desta análise no momento.',
       });
@@ -82,7 +82,7 @@ export function createIrisRouter(agent: IrisAgent): Router {
       res.write(`data: ${JSON.stringify({ conversationId: result.conversationId })}\n\n`);
       res.end();
     } catch (err) {
-      console.error('[IRIS] Stream error:', err);
+      console.error('[Iris Balanceamento] Stream error:', err);
       if (!res.headersSent) {
         res.status(500).json({
           error: 'Problemas técnicos impediram a geração desta análise no momento.',
