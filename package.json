@@ -9,9 +9,17 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "lint": "eslint src/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
-  "keywords": ["balanceamento", "estoque", "ia", "clickhouse", "mcp"],
+  "keywords": [
+    "balanceamento",
+    "estoque",
+    "ia",
+    "clickhouse",
+    "mcp"
+  ],
   "license": "UNLICENSED",
   "private": true,
   "engines": {
@@ -29,6 +37,7 @@
     "@types/node": "^22.0.0",
     "@types/uuid": "^10.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
   }
 }
