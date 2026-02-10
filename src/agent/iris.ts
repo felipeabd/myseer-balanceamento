@@ -3,6 +3,11 @@ import { ClickHouseService } from '../clickhouse/client';
 import { buildSystemPrompt } from './prompt';
 import { agentTools } from './tools';
 import { ConversationManager } from '../conversation/manager';
+import { UsageTracker } from '../tracking/usage-tracker';
+import { ConversationLogger } from '../tracking/conversation-logger';
+import { SessionManager } from '../rules/session-manager';
+import { RuleTrainerAgent } from './rule-trainer';
+import { LoadRulesSkill } from '../rules/load-rules-skill';
 import {
   IrisConfig,
   TenantContext,
@@ -18,9 +23,15 @@ export class IrisAgent {
   private conversations: ConversationManager;
   private rules: BalancingRule[];
   private maxToolCalls: number;
+  private usageTracker: UsageTracker;
+  private conversationLogger: ConversationLogger;
+  private sessionManager: SessionManager;
+  private ruleTrainer: RuleTrainerAgent;
+  private loadRulesSkill: LoadRulesSkill;
 
   // TEMPORARY: Fixed tenant for development until multi-tenant filtering is properly implemented
   private readonly FIXED_TENANT_ID = '33F6E320-F59E-4E43-99C2-2D6748A64B04';
+  private readonly AGENT_NAME = 'iris_balanceamento';
 
   /** Get tenant context with fixed tenant ID */
   private getFixedTenant(tenant: TenantContext): TenantContext {
@@ -37,6 +48,21 @@ export class IrisAgent {
     this.conversations = new ConversationManager();
     this.rules = config.rules ?? [];
     this.maxToolCalls = config.maxToolCalls ?? 2;
+    this.usageTracker = new UsageTracker(this.clickhouse);
+    this.conversationLogger = new ConversationLogger(this.clickhouse);
+    this.sessionManager = new SessionManager(this.clickhouse);
+    this.ruleTrainer = new RuleTrainerAgent(this.clickhouse, this.sessionManager, this.conversations);
+    this.loadRulesSkill = new LoadRulesSkill(this.clickhouse);
+  }
+
+  /** Get usage tracker instance */
+  getUsageTracker(): UsageTracker {
+    return this.usageTracker;
+  }
+
+  /** Get conversation logger instance */
+  getConversationLogger(): ConversationLogger {
+    return this.conversationLogger;
   }
 
   /**
@@ -48,8 +74,55 @@ export class IrisAgent {
     userMessage: string,
     conversationId?: string
   ): Promise<{ conversationId: string; response: string }> {
-    const conv = this.conversations.getOrCreate(conversationId, tenant);
+    const fixedTenant = this.getFixedTenant(tenant);
+    const conv = this.conversations.getOrCreate(conversationId, fixedTenant);
 
+    // ========== RULE TRAINING MODE DETECTION ==========
+    // 1. Check if user wants to enter training mode
+    const isRuleTraining = userMessage.match(/^(regras?:|\/regras?)\s*/i);
+
+    if (isRuleTraining) {
+      // Extract message without prefix
+      const ruleMessage = userMessage.replace(/^(regras?:|\/regras?)\s*/i, '').trim();
+
+      // Activate training session
+      await this.sessionManager.startTrainingSession(
+        conv.id,
+        fixedTenant.tenantId,
+        tenant.userEmail
+      );
+
+      // Redirect to Rule Trainer Agent
+      const response = await this.ruleTrainer.chat(
+        ruleMessage || 'Iniciar treinamento de regras',
+        conv.id,
+        fixedTenant
+      );
+
+      return {
+        conversationId: conv.id,
+        response,
+      };
+    }
+
+    // 2. Check if conversation is already in training mode
+    const isInTraining = await this.sessionManager.isInTrainingMode(conv.id);
+
+    if (isInTraining) {
+      // Continue in Rule Trainer Agent
+      const response = await this.ruleTrainer.chat(
+        userMessage,
+        conv.id,
+        fixedTenant
+      );
+
+      return {
+        conversationId: conv.id,
+        response,
+      };
+    }
+
+    // ========== NORMAL MODE: Load rules and proceed ==========
     // Add user message
     this.conversations.addMessage(conv.id, {
       role: 'user',
@@ -57,13 +130,19 @@ export class IrisAgent {
       timestamp: new Date(),
     });
 
-    const fixedTenant = this.getFixedTenant(tenant);
-    const systemPrompt = buildSystemPrompt(fixedTenant, this.rules);
+    // Load active rules and inject into prompt
+    const rulesPrompt = await this.loadRulesSkill.execute(fixedTenant.tenantId);
+    const systemPrompt = buildSystemPrompt(fixedTenant, this.rules) + rulesPrompt;
     const messages = this.buildAnthropicMessages(conv.messages);
 
     let toolCallCount = 0;
     let currentMessages = messages;
     let finalResponse = '';
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    const startTime = Date.now();
+    const toolsUsed: string[] = [];
+    const sqlQueries: string[] = [];
 
     // Agentic loop: keep going while the model wants to use tools
     while (true) {
@@ -74,6 +153,10 @@ export class IrisAgent {
         tools: agentTools,
         messages: currentMessages,
       });
+
+      // Track token usage
+      totalInputTokens += response.usage.input_tokens;
+      totalOutputTokens += response.usage.output_tokens;
 
       // Collect text blocks and tool use blocks
       const textParts: string[] = [];
@@ -117,6 +200,12 @@ export class IrisAgent {
         if (block.type !== 'tool_use') continue;
         toolCallCount++;
 
+        // Track tool usage
+        toolsUsed.push(block.name);
+        if (block.name === 'clickhouse_query' && block.input.sql) {
+          sqlQueries.push(block.input.sql as string);
+        }
+
         let result: string;
         try {
           result = await this.executeTool(block.name, block.input as Record<string, unknown>, tenant);
@@ -152,6 +241,34 @@ export class IrisAgent {
       timestamp: new Date(),
     });
 
+    // Track token usage (use fixed tenant for consistency with queries)
+    await this.usageTracker.trackUsage({
+      tenantId: fixedTenant.tenantId,
+      userEmail: tenant.userEmail,
+      conversationId: conv.id,
+      model: this.model,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      endpoint: 'chat',
+    });
+
+    // Log conversation
+    const responseTime = Date.now() - startTime;
+    await this.conversationLogger.log({
+      agent: this.AGENT_NAME,
+      tenantId: fixedTenant.tenantId,
+      userEmail: tenant.userEmail,
+      conversationId: conv.id,
+      userQuestion: userMessage,
+      responseSummary: finalResponse,
+      responseType: this.conversationLogger.classifyResponseType(userMessage, finalResponse),
+      toolsUsed,
+      sqlQueries,
+      keywords: this.conversationLogger.extractKeywords(userMessage),
+      hasError: false,
+      responseTimeMs: responseTime,
+    });
+
     return { conversationId: conv.id, response: finalResponse };
   }
 
@@ -164,21 +281,76 @@ export class IrisAgent {
     conversationId: string | undefined,
     onChunk: StreamCallback
   ): Promise<{ conversationId: string }> {
-    const conv = this.conversations.getOrCreate(conversationId, tenant);
+    const fixedTenant = this.getFixedTenant(tenant);
+    const conv = this.conversations.getOrCreate(conversationId, fixedTenant);
 
+    // ========== RULE TRAINING MODE DETECTION ==========
+    // 1. Check if user wants to enter training mode
+    const isRuleTraining = userMessage.match(/^(regras?:|\/regras?)\s*/i);
+
+    if (isRuleTraining) {
+      // Extract message without prefix
+      const ruleMessage = userMessage.replace(/^(regras?:|\/regras?)\s*/i, '').trim();
+
+      // Activate training session
+      await this.sessionManager.startTrainingSession(
+        conv.id,
+        fixedTenant.tenantId,
+        tenant.userEmail
+      );
+
+      // Redirect to Rule Trainer Agent (non-streaming, use original tenant for conversation access)
+      const response = await this.ruleTrainer.chat(
+        ruleMessage || 'Iniciar treinamento de regras',
+        conv.id,
+        tenant
+      );
+
+      // Send response as chunk
+      onChunk(response, false);
+      onChunk('', true);
+
+      return { conversationId: conv.id };
+    }
+
+    // 2. Check if conversation is already in training mode
+    const isInTraining = await this.sessionManager.isInTrainingMode(conv.id);
+
+    if (isInTraining) {
+      // Continue in Rule Trainer Agent (non-streaming, use original tenant for conversation access)
+      const response = await this.ruleTrainer.chat(
+        userMessage,
+        conv.id,
+        tenant
+      );
+
+      // Send response as chunk
+      onChunk(response, false);
+      onChunk('', true);
+
+      return { conversationId: conv.id };
+    }
+
+    // ========== NORMAL MODE: Load rules and proceed ==========
     this.conversations.addMessage(conv.id, {
       role: 'user',
       content: userMessage,
       timestamp: new Date(),
     });
 
-    const fixedTenant = this.getFixedTenant(tenant);
-    const systemPrompt = buildSystemPrompt(fixedTenant, this.rules);
+    // Load active rules and inject into prompt
+    const rulesPrompt = await this.loadRulesSkill.execute(fixedTenant.tenantId);
+    const systemPrompt = buildSystemPrompt(fixedTenant, this.rules) + rulesPrompt;
     const messages = this.buildAnthropicMessages(conv.messages);
 
     let toolCallCount = 0;
     let currentMessages = messages;
     let fullResponse = '';
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    const startTime = Date.now();
+    const toolsUsed: string[] = [];
+    const sqlQueries: string[] = [];
 
     while (true) {
       // Check if we still have tool budget — if yes, use non-streaming for tool loop
@@ -190,6 +362,10 @@ export class IrisAgent {
           tools: agentTools,
           messages: currentMessages,
         });
+
+        // Track token usage
+        totalInputTokens += response.usage.input_tokens;
+        totalOutputTokens += response.usage.output_tokens;
 
         const textParts: string[] = [];
         const toolUseBlocks: Anthropic.ContentBlockParam[] = [];
@@ -228,6 +404,13 @@ export class IrisAgent {
         for (const block of toolUseBlocks) {
           if (block.type !== 'tool_use') continue;
           toolCallCount++;
+
+          // Track tool usage
+          toolsUsed.push(block.name);
+          if (block.name === 'clickhouse_query' && block.input.sql) {
+            sqlQueries.push(block.input.sql as string);
+          }
+
           let result: string;
           try {
             result = await this.executeTool(block.name, block.input as Record<string, unknown>, tenant);
@@ -265,6 +448,12 @@ export class IrisAgent {
           onChunk(event.delta.text, false);
         }
       }
+
+      // Get final message with usage stats
+      const finalMessage = await stream.finalMessage();
+      totalInputTokens += finalMessage.usage.input_tokens;
+      totalOutputTokens += finalMessage.usage.output_tokens;
+
       onChunk('', true);
       break;
     }
@@ -273,6 +462,34 @@ export class IrisAgent {
       role: 'assistant',
       content: fullResponse,
       timestamp: new Date(),
+    });
+
+    // Track token usage (use fixed tenant for consistency with queries)
+    await this.usageTracker.trackUsage({
+      tenantId: fixedTenant.tenantId,
+      userEmail: tenant.userEmail,
+      conversationId: conv.id,
+      model: this.model,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      endpoint: 'stream',
+    });
+
+    // Log conversation
+    const responseTime = Date.now() - startTime;
+    await this.conversationLogger.log({
+      agent: this.AGENT_NAME,
+      tenantId: fixedTenant.tenantId,
+      userEmail: tenant.userEmail,
+      conversationId: conv.id,
+      userQuestion: userMessage,
+      responseSummary: fullResponse,
+      responseType: this.conversationLogger.classifyResponseType(userMessage, fullResponse),
+      toolsUsed,
+      sqlQueries,
+      keywords: this.conversationLogger.extractKeywords(userMessage),
+      hasError: false,
+      responseTimeMs: responseTime,
     });
 
     return { conversationId: conv.id };

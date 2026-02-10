@@ -111,5 +111,52 @@ export function createIrisRouter(agent: IrisAgent): Router {
     res.json({ deleted: true });
   });
 
+  /**
+   * GET /metrics
+   * Get token usage metrics for current tenant.
+   */
+  router.get('/metrics', async (req: Request, res: Response) => {
+    try {
+      const tracker = agent.getUsageTracker();
+      const days = parseInt(req.query.days as string) || 30;
+
+      const [metrics, daily] = await Promise.all([
+        tracker.getTenantMetrics(req.tenant!.tenantId),
+        tracker.getDailyUsage(req.tenant!.tenantId, days),
+      ]);
+
+      res.json({
+        tenant: req.tenant!.tenantId,
+        period: `${days} days`,
+        summary: metrics,
+        daily,
+      });
+    } catch (error) {
+      console.error('[Iris Balanceamento] Metrics error:', error);
+      res.status(500).json({ error: 'Failed to retrieve metrics' });
+    }
+  });
+
+  /**
+   * GET /metrics/conversation/:id
+   * Get token usage for a specific conversation.
+   */
+  router.get('/metrics/conversation/:id', async (req: Request, res: Response) => {
+    try {
+      const tracker = agent.getUsageTracker();
+      const conversationId = req.params.id;
+
+      const metrics = await tracker.getConversationMetrics(conversationId);
+
+      res.json({
+        conversationId,
+        metrics,
+      });
+    } catch (error) {
+      console.error('[Iris Balanceamento] Conversation metrics error:', error);
+      res.status(500).json({ error: 'Failed to retrieve conversation metrics' });
+    }
+  });
+
   return router;
 }

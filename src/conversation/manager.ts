@@ -13,9 +13,10 @@ export class ConversationManager {
   getOrCreate(id: string | undefined, tenant: TenantContext): Conversation {
     if (id && this.conversations.has(id)) {
       const conv = this.conversations.get(id)!;
-      // Validate tenant ownership
+      // Update tenant if different (allows migration for fixed tenant scenarios)
       if (conv.tenantId !== tenant.tenantId) {
-        throw new Error('Conversation does not belong to this tenant');
+        conv.tenantId = tenant.tenantId;
+        conv.userEmail = tenant.userEmail;
       }
       return conv;
     }

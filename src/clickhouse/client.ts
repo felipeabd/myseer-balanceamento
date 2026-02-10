@@ -21,6 +21,14 @@ export class ClickHouseService {
   }
 
   /**
+   * Execute a raw DDL/DML command (CREATE, INSERT, etc).
+   * This method does NOT require tenant filtering.
+   */
+  async execute(sql: string): Promise<void> {
+    await this.client.exec({ query: sql });
+  }
+
+  /**
    * Execute a raw SELECT query scoped to the tenant.
    * The query MUST already include the tenant filter — this method
    * is a safety net that validates the query contains the tenant clause.
