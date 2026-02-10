@@ -21,7 +21,7 @@ export class IrisAgent {
 
   constructor(config: IrisConfig) {
     this.anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
-    this.model = config.anthropicModel ?? 'claude-sonnet-4-5-20250929';
+    this.model = config.anthropicModel ?? 'claude-haiku-4-5-20251001';
     this.clickhouse = new ClickHouseService(config.clickhouse);
     this.conversations = new ConversationManager();
     this.rules = config.rules ?? [];
