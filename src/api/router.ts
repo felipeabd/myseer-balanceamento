@@ -159,7 +159,7 @@ export function createIrisRouter(agent: IrisAgent): Router {
   router.get('/metrics/conversation/:id', async (req: Request, res: Response) => {
     try {
       const tracker = agent.getUsageTracker();
-      const conversationId = req.params.id;
+      const conversationId = req.params.id as string;
 
       const metrics = await tracker.getConversationMetrics(conversationId);
 

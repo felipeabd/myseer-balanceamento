@@ -43,7 +43,7 @@ export class LoadRulesSkill {
       return '';
     }
 
-    const rules = rows as Rule[];
+    const rules = rows as unknown as Rule[];
 
     const regrasFormatadas = rules
       .map((r, idx) => {
@@ -100,6 +100,6 @@ IMPORTANTE:
       userEmail: '',
     });
 
-    return rows as Rule[];
+    return rows as unknown as Rule[];
   }
 }

@@ -126,7 +126,7 @@ export class UsageTracker {
       };
     }
 
-    return rows[0] as UsageMetrics;
+    return rows[0] as unknown as UsageMetrics;
   }
 
   /**
@@ -156,7 +156,7 @@ export class UsageTracker {
       };
     }
 
-    return rows[0] as UsageMetrics;
+    return rows[0] as unknown as UsageMetrics;
   }
 
   /**
@@ -178,6 +178,6 @@ export class UsageTracker {
       ORDER BY date DESC
     `;
 
-    return await this.clickhouse.query(query, { tenantId, userEmail: '' });
+    return await this.clickhouse.query(query, { tenantId, userEmail: '' }) as unknown as Array<{ date: string; totalTokens: number; costUsd: number }>;
   }
 }

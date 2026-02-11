@@ -40,7 +40,7 @@ export class SessionManager {
       return null;
     }
 
-    return result[0] as TrainingSession;
+    return result[0] as unknown as TrainingSession;
   }
 
   /**

@@ -1,4 +1,4 @@
-import { useState, KeyboardEvent, useRef, useEffect } from 'react';
+import { useState, type KeyboardEvent, useRef, useEffect } from 'react';
 
 interface MessageInputProps {
   onSendMessage: (message: string) => void;

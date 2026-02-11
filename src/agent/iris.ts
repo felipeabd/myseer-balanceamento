@@ -218,8 +218,8 @@ export class IrisAgent {
 
         // Track tool usage
         toolsUsed.push(block.name);
-        if (block.name === 'clickhouse_query' && block.input.sql) {
-          sqlQueries.push(block.input.sql as string);
+        if (block.name === 'clickhouse_query' && (block.input as Record<string, unknown>).sql) {
+          sqlQueries.push((block.input as Record<string, unknown>).sql as string);
         }
 
         let result: string;
@@ -428,8 +428,8 @@ export class IrisAgent {
 
           // Track tool usage
           toolsUsed.push(block.name);
-          if (block.name === 'clickhouse_query' && block.input.sql) {
-            sqlQueries.push(block.input.sql as string);
+          if (block.name === 'clickhouse_query' && (block.input as Record<string, unknown>).sql) {
+            sqlQueries.push((block.input as Record<string, unknown>).sql as string);
           }
 
           let result: string;
