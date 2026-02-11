@@ -13,10 +13,6 @@ export class ClickHouseService {
       username: config.username ?? 'default',
       password: config.password ?? '',
       request_timeout: 30_000,
-      clickhouse_settings: {
-        max_result_rows: '500',
-        result_overflow_mode: 'throw',
-      },
     });
   }
 

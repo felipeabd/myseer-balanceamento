@@ -526,11 +526,13 @@ export class IrisAgent {
   ): Promise<string> {
     if (name === 'clickhouse_query') {
       const sql = input.sql as string;
+      console.log('[Iris Tool] clickhouse_query SQL:', sql);
 
       // TEMPORARY: Override tenant with fixed tenant ID for development
       const fixedTenant = this.getFixedTenant(tenant);
 
       const rows = await this.clickhouse.query(sql, fixedTenant);
+      console.log('[Iris Tool] Result rows:', Array.isArray(rows) ? rows.length : 0);
       return JSON.stringify(rows);
     }
 
