@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Message } from '../types';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3030';
+
 interface MessageListProps {
   messages: Message[];
   isLoading?: boolean;
@@ -55,9 +57,10 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
                     components={{
                       a: ({ href, children, ...props }) => {
                         if (href && href.includes('/api/iris/download/csv/')) {
+                          const csvUrl = href.startsWith('http') ? href : `${API_BASE_URL}${href}`;
                           return (
                             <a
-                              href={href}
+                              href={csvUrl}
                               className="not-prose inline-flex items-center gap-2 px-5 py-2.5 mt-3 mb-1 rounded-lg transition-colors no-underline font-bold text-base text-white shadow-sm"
                               style={{ backgroundColor: '#1B5E20', color: '#ffffff' }}
                               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#154a19')}

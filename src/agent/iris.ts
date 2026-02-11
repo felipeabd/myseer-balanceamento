@@ -547,7 +547,7 @@ export class IrisAgent {
 
       const csvContent = generateCsv(columns, data);
       const csvId = this.csvStore.save(csvContent, `${filename}.csv`);
-      const downloadUrl = `${this.baseUrl}/api/iris/download/csv/${csvId}`;
+      const downloadUrl = `/api/iris/download/csv/${csvId}`;
 
       return JSON.stringify({
         success: true,
