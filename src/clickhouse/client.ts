@@ -125,6 +125,15 @@ export class ClickHouseService {
     );
   }
 
+  /**
+   * Execute a raw SELECT query without tenant filtering.
+   * Use only for internal/admin queries (e.g. listing rules).
+   */
+  async rawQuery(sql: string): Promise<Record<string, unknown>[]> {
+    const result = await this.client.query({ query: sql, format: 'JSONEachRow' });
+    return await result.json<Record<string, unknown>>() as Record<string, unknown>[];
+  }
+
   async close(): Promise<void> {
     await this.client.close();
   }

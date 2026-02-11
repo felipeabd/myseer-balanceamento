@@ -150,6 +150,7 @@ Se uma exceção conflitar com regra crítica, você DEVE alertar o usuário ant
 ### 1. Interpretação
 - Entenda exatamente o que o usuário deseja.
 - Se faltar informação essencial, faça UMA pergunta objetiva.
+- Se o usuário quiser ALTERAR ou CORRIGIR uma regra existente, use ListarRegras para ver as regras atuais, depois use AtualizarRegra para modificar.
 
 ### 2. Proposta de regra
 Responda SEMPRE com:
@@ -160,9 +161,10 @@ Responda SEMPRE com:
 
 ### 3. Confirmação
 Quando o usuário responder "confirma":
-- Use a tool SalvarRegra
+- Para NOVA regra: Use a tool SalvarRegra
+- Para ALTERAR regra existente: Use a tool AtualizarRegra com o id da regra e os campos a alterar
 - Envie exatamente o JSON proposto
-- Confirme que a regra foi salva
+- Confirme que a regra foi salva/atualizada
 
 ### 4. Continuidade ou Encerramento
 Pergunte:
@@ -174,6 +176,13 @@ Se a resposta for 2:
 - Use a tool AtualizarSessao com status = 0
 - A sessão será encerrada automaticamente
 - Informe que voltou ao modo Análise de Balanceamento
+
+## ALTERAÇÃO DE REGRAS EXISTENTES
+Quando o usuário pedir para CORRIGIR, REFAZER ou ALTERAR uma regra:
+1. Use ListarRegras para ver as regras atuais e identificar a regra pelo ID
+2. Proponha a alteração ao usuário
+3. Após confirmação, use AtualizarRegra com o ID da regra e os campos que mudaram
+4. NUNCA apenas descreva a alteração sem executar no banco — SEMPRE use a tool AtualizarRegra
 
 ## REGRAS DE COMPORTAMENTO
 - Uma regra por vez
@@ -250,6 +259,59 @@ Se a resposta for 2:
         },
       },
       {
+        name: 'ListarRegras',
+        description: 'Lista todas as regras ativas de balanceamento do tenant. Use para consultar regras existentes antes de atualizar.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+          required: [],
+        },
+      },
+      {
+        name: 'AtualizarRegra',
+        description: 'Atualiza uma regra existente no banco de dados. Pode alterar qualquer campo: status, tipo, prioridade, alvo, condicao, acao, texto.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'ID (UUID) da regra a ser atualizada',
+            },
+            status: {
+              type: 'string',
+              enum: ['ativo', 'inativo'],
+              description: 'Novo status da regra',
+            },
+            tipo: {
+              type: 'string',
+              enum: ['bloqueio', 'limite', 'prioridade', 'excecao'],
+              description: 'Novo tipo da regra',
+            },
+            prioridade: {
+              type: 'integer',
+              description: 'Nova prioridade',
+            },
+            alvo: {
+              type: 'object',
+              description: 'Novo JSON de alvo',
+            },
+            condicao: {
+              type: 'object',
+              description: 'Novo JSON de condição',
+            },
+            acao: {
+              type: 'object',
+              description: 'Novo JSON de ação',
+            },
+            texto: {
+              type: 'string',
+              description: 'Nova descrição em linguagem de negócio',
+            },
+          },
+          required: ['id'],
+        },
+      },
+      {
         name: 'AtualizarSessao',
         description: 'Atualiza o status da sessão de treinamento. Use status=0 para encerrar o treinamento.',
         input_schema: {
@@ -309,6 +371,10 @@ Se a resposta for 2:
 
             if (block.name === 'SalvarRegra') {
               result = await this.salvarRegra(block.input as any, tenant);
+            } else if (block.name === 'ListarRegras') {
+              result = await this.listarRegras(tenant);
+            } else if (block.name === 'AtualizarRegra') {
+              result = await this.atualizarRegra(block.input as any, tenant);
             } else if (block.name === 'AtualizarSessao') {
               result = await this.atualizarSessao(block.input as any, conversationId);
             }
@@ -386,6 +452,71 @@ Se a resposta for 2:
       };
     } catch (error: any) {
       console.error('[RuleTrainer] Erro ao salvar regra:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  private async listarRegras(tenant: TenantContext): Promise<any> {
+    const query = `
+      SELECT id, tipo, status, prioridade, alvo, condicao, acao, texto, criado_por, criado_em
+      FROM ia_regras_balanceamento
+      WHERE (tenant = '${tenant.tenantId}' OR tenant = 'null')
+        AND status = 'ativo'
+      ORDER BY prioridade ASC
+    `;
+
+    try {
+      const rows = await this.clickhouse.rawQuery(query);
+      return {
+        success: true,
+        rules: rows,
+        count: rows.length,
+      };
+    } catch (error: any) {
+      console.error('[RuleTrainer] Erro ao listar regras:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  private async atualizarRegra(input: any, tenant: TenantContext): Promise<any> {
+    const escape = (str: string) => str.replace(/'/g, "\\'");
+    const setClauses: string[] = [];
+
+    if (input.status) setClauses.push(`status = '${input.status}'`);
+    if (input.tipo) setClauses.push(`tipo = '${input.tipo}'`);
+    if (input.prioridade !== undefined) setClauses.push(`prioridade = ${input.prioridade}`);
+    if (input.alvo) setClauses.push(`alvo = '${escape(JSON.stringify(input.alvo))}'`);
+    if (input.condicao) setClauses.push(`condicao = '${escape(JSON.stringify(input.condicao))}'`);
+    if (input.acao) setClauses.push(`acao = '${escape(JSON.stringify(input.acao))}'`);
+    if (input.texto) setClauses.push(`texto = '${escape(input.texto)}'`);
+    setClauses.push(`atualizado_em = now()`);
+
+    if (setClauses.length === 1) {
+      return { success: false, error: 'Nenhum campo para atualizar' };
+    }
+
+    const query = `
+      ALTER TABLE ia_regras_balanceamento
+      UPDATE ${setClauses.join(', ')}
+      WHERE id = '${input.id}'
+        AND (tenant = '${tenant.tenantId}' OR tenant = 'null')
+    `;
+
+    try {
+      await this.clickhouse.execute(query);
+      return {
+        success: true,
+        id: input.id,
+        message: 'Regra atualizada com sucesso',
+      };
+    } catch (error: any) {
+      console.error('[RuleTrainer] Erro ao atualizar regra:', error);
       return {
         success: false,
         error: error.message,

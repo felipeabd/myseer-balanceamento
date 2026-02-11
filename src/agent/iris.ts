@@ -78,12 +78,17 @@ export class IrisAgent {
     const conv = this.conversations.getOrCreate(conversationId, fixedTenant);
 
     // ========== RULE TRAINING MODE DETECTION ==========
-    // 1. Check if user wants to enter training mode
+    // 1. Check if user wants to enter training mode (explicit command)
     const isRuleTraining = userMessage.match(/^(regras?:|\/regras?)\s*/i);
 
-    if (isRuleTraining) {
-      // Extract message without prefix
-      const ruleMessage = userMessage.replace(/^(regras?:|\/regras?)\s*/i, '').trim();
+    // 2. Check if user wants to modify/fix a rule (implicit intent in normal mode)
+    const isRuleModification = !isRuleTraining && this.detectRuleModificationIntent(userMessage);
+
+    if (isRuleTraining || isRuleModification) {
+      // Extract message without prefix (for explicit command)
+      const ruleMessage = isRuleTraining
+        ? userMessage.replace(/^(regras?:|\/regras?)\s*/i, '').trim()
+        : userMessage;
 
       // Activate training session
       await this.sessionManager.startTrainingSession(
@@ -105,7 +110,7 @@ export class IrisAgent {
       };
     }
 
-    // 2. Check if conversation is already in training mode
+    // 3. Check if conversation is already in training mode
     const isInTraining = await this.sessionManager.isInTrainingMode(conv.id);
 
     if (isInTraining) {
@@ -285,12 +290,17 @@ export class IrisAgent {
     const conv = this.conversations.getOrCreate(conversationId, fixedTenant);
 
     // ========== RULE TRAINING MODE DETECTION ==========
-    // 1. Check if user wants to enter training mode
+    // 1. Check if user wants to enter training mode (explicit command)
     const isRuleTraining = userMessage.match(/^(regras?:|\/regras?)\s*/i);
 
-    if (isRuleTraining) {
-      // Extract message without prefix
-      const ruleMessage = userMessage.replace(/^(regras?:|\/regras?)\s*/i, '').trim();
+    // 2. Check if user wants to modify/fix a rule (implicit intent in normal mode)
+    const isRuleModification = !isRuleTraining && this.detectRuleModificationIntent(userMessage);
+
+    if (isRuleTraining || isRuleModification) {
+      // Extract message without prefix (for explicit command)
+      const ruleMessage = isRuleTraining
+        ? userMessage.replace(/^(regras?:|\/regras?)\s*/i, '').trim()
+        : userMessage;
 
       // Activate training session
       await this.sessionManager.startTrainingSession(
@@ -313,7 +323,7 @@ export class IrisAgent {
       return { conversationId: conv.id };
     }
 
-    // 2. Check if conversation is already in training mode
+    // 3. Check if conversation is already in training mode
     const isInTraining = await this.sessionManager.isInTrainingMode(conv.id);
 
     if (isInTraining) {
@@ -523,6 +533,29 @@ export class IrisAgent {
       role: m.role,
       content: m.content,
     }));
+  }
+
+  /**
+   * Detect if user wants to modify/fix/redo a rule in normal mode.
+   */
+  private detectRuleModificationIntent(message: string): boolean {
+    const lower = message.toLowerCase();
+    const patterns = [
+      /refaz(?:er|a)?\s+(?:a|uma|essa|esta|aquela)?\s*regra/,
+      /corrig(?:ir|a|e)\s+(?:a|uma|essa|esta|aquela)?\s*regra/,
+      /alter(?:ar|e|a)\s+(?:a|uma|essa|esta|aquela)?\s*regra/,
+      /atualiz(?:ar|e|a)\s+(?:a|uma|essa|esta|aquela)?\s*regra/,
+      /mud(?:ar|e|a)\s+(?:a|uma|essa|esta|aquela)?\s*regra/,
+      /edit(?:ar|e|a)\s+(?:a|uma|essa|esta|aquela)?\s*regra/,
+      /desativ(?:ar|e|a)\s+(?:a|uma|essa|esta|aquela)?\s*regra/,
+      /remov(?:er|a)\s+(?:a|uma|essa|esta|aquela)?\s*regra/,
+      /exclu(?:ir|a)\s+(?:a|uma|essa|esta|aquela)?\s*regra/,
+      /regra.*(errada|incorreta|equivocada|wrong)/,
+      /regra.*(deve ser|deveria ser|precisa ser)/,
+      /preciso.*(alterar|mudar|corrigir|atualizar|criar|adicionar).*regra/,
+      /quero.*(alterar|mudar|corrigir|atualizar|criar|adicionar).*regra/,
+    ];
+    return patterns.some(p => p.test(lower));
   }
 
   /** Load or update balancing rules at runtime */
