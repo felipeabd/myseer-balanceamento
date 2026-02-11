@@ -37,7 +37,8 @@ Você executa UMA análise por pergunta, de forma objetiva e concisa.
 Ao transferir X unidades:
 - Doadora (mediaf_un > 0): cobertura_nova = ((qtestoque - X) / mediaf_un) * 30
 - Doadora (mediaf_un = 0): sem cobertura calculável — pode doar TODO o excesso (estoque parado)
-- Receptora: cobertura_nova = ((qtestoque + X) / mediaf_un) * 30 (receptora SEMPRE tem mediaf_un > 0)
+- Receptora (mediaf_un > 0): cobertura_nova = ((qtestoque + X) / mediaf_un) * 30
+- Receptora (mediaf_un = 0): sem cobertura calculável — recebe somente se o usuário autorizar
 
 ## ESTRUTURA DE DADOS
 Tabela: default.ia_fato_balanceamento
@@ -78,20 +79,15 @@ Tipos de regra:
 3. Buscar produtos com oportunidade REAL de balanceamento:
    IMPORTANTE:
    - Doadora: qualquer loja com qtexcesso > 0 (mesmo sem demanda — estoque parado é candidato ideal pra doar)
-   - Receptora: somente lojas com qtnecessidade > 0 E mediaf_un > 0 (sem demanda = sem sentido receber)
+   - Receptora: qualquer loja com qtnecessidade > 0 (com ou sem demanda)
    SELECT cdprod, descricao, nomefabricante, curva,
      SUM(qtexcesso) AS total_excesso,
-     SUM(CASE WHEN mediaf_un > 0 THEN qtnecessidade ELSE 0 END) AS total_necessidade,
-     LEAST(
-       SUM(qtexcesso),
-       SUM(CASE WHEN mediaf_un > 0 THEN qtnecessidade ELSE 0 END)
-     ) AS qt_transferivel,
+     SUM(qtnecessidade) AS total_necessidade,
+     LEAST(SUM(qtexcesso), SUM(qtnecessidade)) AS qt_transferivel,
      COUNT(CASE WHEN qtexcesso > 0 THEN 1 END) AS lojas_doadoras,
-     COUNT(CASE WHEN qtnecessidade > 0 AND mediaf_un > 0 THEN 1 END) AS lojas_receptoras,
-     ROUND(LEAST(
-       SUM(qtexcesso),
-       SUM(CASE WHEN mediaf_un > 0 THEN qtnecessidade ELSE 0 END)
-     ) * AVG(vlrcusto), 2) AS valor_transferivel
+     COUNT(CASE WHEN qtnecessidade > 0 THEN 1 END) AS lojas_receptoras,
+     COUNT(CASE WHEN qtnecessidade > 0 AND mediaf_un = 0 THEN 1 END) AS lojas_receptoras_sem_demanda,
+     ROUND(LEAST(SUM(qtexcesso), SUM(qtnecessidade)) * AVG(vlrcusto), 2) AS valor_transferivel
    FROM default.ia_fato_balanceamento
    WHERE tenant = '{tenantId}' AND filialdeposito <> 1 AND dtcarga = '{dtcarga}'
      -- Adicionar filtros conforme o usuário pediu (SEMPRE usar ILIKE para textos):
@@ -100,11 +96,9 @@ Tipos de regra:
      -- AND descricao ILIKE '%termo%'
      -- AND cdprod = Z  (código é numérico, usar = )
    GROUP BY cdprod, descricao, nomefabricante, curva
-   HAVING SUM(CASE WHEN mediaf_un > 0 THEN qtnecessidade ELSE 0 END) > 0
-     AND SUM(qtexcesso) > 0
+   HAVING SUM(qtnecessidade) > 0 AND SUM(qtexcesso) > 0
    ORDER BY valor_transferivel DESC
    LIMIT N
-   IMPORTANTE: Doadora pode ter demanda zero (doa tudo). Receptora PRECISA de demanda > 0.
 - NÃO gerar recomendações finais
 - Resposta DESCRITIVA: cenário, opções, volumes, valor transferível
 - Encerrar com UMA pergunta neutra ao usuário
@@ -134,7 +128,8 @@ Dado o detalhamento por loja de um produto, siga EXATAMENTE estes passos:
 
 **Passo 1: Separar lojas**
 - Doadoras: lojas com qtexcesso > 0, qualquer mediaf_un (ordenar por cobertura DESC, lojas com mediaf_un = 0 vêm PRIMEIRO pois têm cobertura infinita — estoque parado sem demanda, candidatas ideais pra doar tudo)
-- Receptoras: lojas com qtnecessidade > 0 E mediaf_un > 0 (ordenar por mediaf_un DESC — quem tem MAIS demanda recebe primeiro). Lojas com mediaf_un = 0 NÃO podem ser receptoras.
+- Receptoras COM demanda: lojas com qtnecessidade > 0 E mediaf_un > 0 (ordenar por mediaf_un DESC — quem tem MAIS demanda recebe primeiro)
+- Receptoras SEM demanda: lojas com qtnecessidade > 0 E mediaf_un = 0 (ficam por ÚLTIMO na fila de recebimento)
 
 **Passo 2: Calcular cobertura-alvo**
 - Considerar TODAS as lojas (doadoras + receptoras) que têm mediaf_un > 0
@@ -148,21 +143,31 @@ Dado o detalhamento por loja de um produto, siga EXATAMENTE estes passos:
 - Quantidade a receber em cada receptora: qtestoque_ideal - qtestoque_atual (se positivo, ela recebe)
 
 **Passo 4: Montar pares de transferência**
-- Percorrer receptoras em ordem de mediaf_un DESC (maior demanda primeiro)
+- PRIMEIRO: percorrer receptoras COM demanda (mediaf_un > 0) em ordem de mediaf_un DESC (maior demanda primeiro)
 - Para cada receptora, alocar unidades das doadoras (maior cobertura primeiro)
 - Recalcular cobertura projetada de cada loja após a transferência:
   cobertura_projetada = ((qtestoque ± transferência) / mediaf_un) * 30
 - Parar quando a receptora atingir a cobertura_alvo ou quando não houver mais doadoras
+- DEPOIS: se ainda houver excesso disponível nas doadoras E existirem receptoras SEM demanda (mediaf_un = 0), NÃO incluir automaticamente. Ir para o Passo 4b.
+
+**Passo 4b: Receptoras sem demanda (ALERTA OBRIGATÓRIO)**
+Se existirem lojas receptoras com qtnecessidade > 0 mas mediaf_un = 0:
+- NÃO incluir essas lojas no plano automaticamente
+- ALERTAR o usuário listando essas lojas:
+  "As seguintes lojas têm necessidade mas não possuem demanda registrada (mediaf_un = 0): [lista de filiais].
+  Deseja incluí-las no plano de transferências ou prefere deixá-las de fora?"
+- Aguardar a resposta do usuário antes de prosseguir
+- Se o usuário confirmar, incluí-las POR ÚLTIMO, transferindo apenas a qtnecessidade de cada uma
 
 **Passo 5: Apresentar resultado**
 - Tabela: Origem (cdFilial) → Destino (cdFilial) | Quantidade | Cobertura Antes → Depois (ambas lojas)
+- Para receptoras sem demanda: mostrar "sem demanda" na coluna de cobertura projetada
 - Resumo: cobertura média antes e depois da equalização
 - Valor financeiro total das transferências (quantidade × vlrcusto)
 
 **Restrições:**
 - Uma doadora com mediaf_un > 0 NUNCA pode ficar com cobertura abaixo da cobertura_alvo após doar
 - Uma doadora com mediaf_un = 0 pode doar TODO o excesso (estoque parado, sem demanda)
-- Receptoras DEVEM ter mediaf_un > 0 (sem demanda = não faz sentido receber)
 - Transferências devem ser em unidades INTEIRAS (arredondar para baixo)
 
 ## INFORMAÇÃO FINANCEIRA
