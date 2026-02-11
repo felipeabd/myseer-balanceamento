@@ -21,12 +21,8 @@ export interface UsageMetrics {
 export class UsageTracker {
   private clickhouse: ClickHouseService;
 
-  // Token costs per 1M tokens
+  // Token costs per 1M tokens (as of 2025)
   private readonly TOKEN_COSTS = {
-    // OpenAI models (active)
-    'gpt-4o-mini': { input: 0.15, output: 0.60 },
-    'gpt-4o': { input: 2.50, output: 10.00 },
-    // Claude models (kept for historical data)
     'claude-opus-4': { input: 15.0, output: 75.0 },
     'claude-sonnet-4': { input: 3.0, output: 15.0 },
     'claude-sonnet-3-5': { input: 3.0, output: 15.0 },
@@ -85,8 +81,8 @@ export class UsageTracker {
     const modelKey = Object.keys(this.TOKEN_COSTS).find(key => model.includes(key));
 
     if (!modelKey) {
-      console.warn(`[UsageTracker] Unknown model: ${model}, using gpt-4o-mini pricing`);
-      const costs = this.TOKEN_COSTS['gpt-4o-mini'];
+      console.warn(`[UsageTracker] Unknown model: ${model}, using Haiku pricing`);
+      const costs = this.TOKEN_COSTS['claude-haiku-4-5'];
       return (inputTokens / 1_000_000) * costs.input + (outputTokens / 1_000_000) * costs.output;
     }
 

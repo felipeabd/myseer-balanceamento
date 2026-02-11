@@ -12,7 +12,7 @@ const PORT = process.env.PORT ?? 3030;
 
 async function main() {
   // Validate required env vars
-  const requiredEnvVars = ['OPENAI_API_KEY', 'CLICKHOUSE_URL'];
+  const requiredEnvVars = ['ANTHROPIC_API_KEY', 'CLICKHOUSE_URL'];
   for (const envVar of requiredEnvVars) {
     if (!process.env[envVar]) {
       console.error(`Missing required environment variable: ${envVar}`);
@@ -21,8 +21,8 @@ async function main() {
   }
 
   const agent = new IrisAgent({
-    openaiApiKey: process.env.OPENAI_API_KEY!,
-    openaiModel: process.env.OPENAI_MODEL,
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY!,
+    anthropicModel: process.env.ANTHROPIC_MODEL,
     clickhouse: {
       url: process.env.CLICKHOUSE_URL!,
       database: process.env.CLICKHOUSE_DATABASE ?? 'default',

@@ -8,7 +8,7 @@
  *   import { IrisAgent, createIrisRouter } from '@myseer/balanceamento';
  *
  *   const agent = new IrisAgent({
- *     openaiApiKey: process.env.OPENAI_API_KEY!,
+ *     anthropicApiKey: process.env.ANTHROPIC_API_KEY!,
  *     clickhouse: {
  *       url: process.env.CLICKHOUSE_URL!,
  *       database: 'default',

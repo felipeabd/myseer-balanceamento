@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { ClickHouseService } from '../clickhouse/client';
 import { buildSystemPrompt } from './prompt';
 import { agentTools } from './tools';
@@ -19,7 +19,7 @@ import {
 } from '../types';
 
 export class IrisAgent {
-  private openai: OpenAI;
+  private anthropic: Anthropic;
   private model: string;
   private clickhouse: ClickHouseService;
   private conversations: ConversationManager;
@@ -46,8 +46,8 @@ export class IrisAgent {
   }
 
   constructor(config: IrisConfig) {
-    this.openai = new OpenAI({ apiKey: config.openaiApiKey, timeout: 30_000 });
-    this.model = config.openaiModel ?? 'gpt-4o-mini';
+    this.anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
+    this.model = config.anthropicModel ?? 'claude-haiku-4-5-20251001';
     this.clickhouse = new ClickHouseService(config.clickhouse);
     this.conversations = new ConversationManager();
     this.rules = config.rules ?? [];
@@ -77,29 +77,8 @@ export class IrisAgent {
   }
 
   /**
-   * Handle OpenAI API errors with user-friendly messages in Portuguese.
-   */
-  private handleApiError(err: unknown): string {
-    if (err instanceof OpenAI.APIConnectionTimeoutError) {
-      return 'O serviço de IA demorou demais para responder. Por favor, tente novamente em alguns instantes.';
-    }
-    if (err instanceof OpenAI.RateLimitError) {
-      return 'O serviço de IA está com muitas requisições no momento. Aguarde alguns segundos e tente novamente.';
-    }
-    if (err instanceof OpenAI.AuthenticationError) {
-      return 'Erro de autenticação com o serviço de IA. Entre em contato com o suporte técnico.';
-    }
-    if (err instanceof OpenAI.APIError) {
-      console.error('[IrisAgent] OpenAI API error:', err.message);
-      return 'Ocorreu um erro no serviço de IA. Por favor, tente novamente.';
-    }
-    console.error('[IrisAgent] Unexpected error:', err);
-    return 'Ocorreu um erro inesperado. Por favor, tente novamente.';
-  }
-
-  /**
    * Process a user message and return the agent's response.
-   * Handles the full agentic loop: LLM -> tool call -> LLM -> response.
+   * Handles the full agentic loop: LLM → tool call → LLM → response.
    */
   async chat(
     tenant: TenantContext,
@@ -170,7 +149,7 @@ export class IrisAgent {
     // Load active rules and inject into prompt
     const rulesPrompt = await this.loadRulesSkill.execute(fixedTenant.tenantId);
     const systemPrompt = buildSystemPrompt(fixedTenant, this.rules) + rulesPrompt;
-    const messages = this.buildOpenAIMessages(systemPrompt, conv.messages);
+    const messages = this.buildAnthropicMessages(conv.messages);
 
     let toolCallCount = 0;
     let currentMessages = messages;
@@ -182,71 +161,93 @@ export class IrisAgent {
     const sqlQueries: string[] = [];
 
     // Agentic loop: keep going while the model wants to use tools
-    try {
-      while (true) {
-        const response = await this.openai.chat.completions.create({
-          model: this.model,
-          max_tokens: 4096,
-          tools: agentTools,
-          messages: currentMessages,
-        });
+    while (true) {
+      const response = await this.anthropic.messages.create({
+        model: this.model,
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools: agentTools,
+        messages: currentMessages,
+      });
 
-        // Track token usage
-        totalInputTokens += response.usage?.prompt_tokens ?? 0;
-        totalOutputTokens += response.usage?.completion_tokens ?? 0;
+      // Track token usage
+      totalInputTokens += response.usage.input_tokens;
+      totalOutputTokens += response.usage.output_tokens;
 
-        const choice = response.choices[0];
-        const message = choice.message;
+      // Collect text blocks and tool use blocks
+      const textParts: string[] = [];
+      const toolUseBlocks: Anthropic.ContentBlockParam[] = [];
 
-        // If no tool calls or we hit the limit, we're done
-        if (!message.tool_calls?.length || toolCallCount >= this.maxToolCalls) {
-          finalResponse = message.content ?? '';
-          break;
-        }
-
-        // Add the assistant message with tool_calls to the conversation
-        currentMessages = [
-          ...currentMessages,
-          message,
-        ];
-
-        // Execute tool calls and add results
-        for (const toolCall of message.tool_calls) {
-          toolCallCount++;
-
-          const toolName = toolCall.function.name;
-          const toolArgs = JSON.parse(toolCall.function.arguments);
-
-          // Track tool usage
-          toolsUsed.push(toolName);
-          if (toolName === 'clickhouse_query' && toolArgs.sql) {
-            sqlQueries.push(toolArgs.sql);
-          }
-
-          let result: string;
-          try {
-            result = await this.executeTool(toolName, toolArgs, tenant);
-          } catch (err) {
-            result = JSON.stringify({ error: 'Erro ao executar consulta' });
-          }
-
-          currentMessages = [
-            ...currentMessages,
-            {
-              role: 'tool' as const,
-              tool_call_id: toolCall.id,
-              content: result,
-            },
-          ];
-        }
-
-        // If we've hit the limit after this round, force a final response
-        if (toolCallCount >= this.maxToolCalls) {
-          // Continue the loop — the model will see tool results and generate text
+      for (const block of response.content) {
+        if (block.type === 'text') {
+          textParts.push(block.text);
+        } else if (block.type === 'tool_use') {
+          toolUseBlocks.push(block);
         }
       }
-    } catch (err) {
-      finalResponse = this.handleApiError(err);
+
+      // If no tool calls or we hit the limit, we're done
+      if (toolUseBlocks.length === 0 || toolCallCount >= this.maxToolCalls) {
+        finalResponse = textParts.join('\n');
+        break;
+      }
+
+      // Execute tool calls
+      const toolResults: Anthropic.MessageParam[] = [];
+      const assistantContent: Anthropic.ContentBlockParam[] = [
+        ...response.content.map(block => {
+          if (block.type === 'text') return { type: 'text' as const, text: block.text };
+          if (block.type === 'tool_use') return {
+            type: 'tool_use' as const,
+            id: block.id,
+            name: block.name,
+            input: block.input,
+          };
+          return block as Anthropic.ContentBlockParam;
+        }),
+      ];
+
+      currentMessages = [
+        ...currentMessages,
+        { role: 'assistant' as const, content: assistantContent },
+      ];
+
+      for (const block of toolUseBlocks) {
+        if (block.type !== 'tool_use') continue;
+        toolCallCount++;
+
+        // Track tool usage
+        toolsUsed.push(block.name);
+        if (block.name === 'clickhouse_query' && (block.input as Record<string, unknown>).sql) {
+          sqlQueries.push((block.input as Record<string, unknown>).sql as string);
+        }
+
+        let result: string;
+        try {
+          result = await this.executeTool(block.name, block.input as Record<string, unknown>, tenant);
+        } catch (err) {
+          result = JSON.stringify({ error: 'Erro ao executar consulta' });
+        }
+
+        currentMessages = [
+          ...currentMessages,
+          {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'tool_result' as const,
+                tool_use_id: block.id,
+                content: result,
+              },
+            ],
+          },
+        ];
+      }
+
+      // If we've hit the limit after this round, force a final response
+      if (toolCallCount >= this.maxToolCalls) {
+        // Continue the loop — the model will see tool results and generate text
+      }
     }
 
     // Save assistant response
@@ -361,7 +362,7 @@ export class IrisAgent {
     // Load active rules and inject into prompt
     const rulesPrompt = await this.loadRulesSkill.execute(fixedTenant.tenantId);
     const systemPrompt = buildSystemPrompt(fixedTenant, this.rules) + rulesPrompt;
-    const messages = this.buildOpenAIMessages(systemPrompt, conv.messages);
+    const messages = this.buildAnthropicMessages(conv.messages);
 
     let toolCallCount = 0;
     let currentMessages = messages;
@@ -372,102 +373,110 @@ export class IrisAgent {
     const toolsUsed: string[] = [];
     const sqlQueries: string[] = [];
 
-    try {
-      while (true) {
-        // Check if we still have tool budget — if yes, use non-streaming for tool loop
-        if (toolCallCount < this.maxToolCalls) {
-          const response = await this.openai.chat.completions.create({
-            model: this.model,
-            max_tokens: 4096,
-            tools: agentTools,
-            messages: currentMessages,
-          });
-
-          // Track token usage
-          totalInputTokens += response.usage?.prompt_tokens ?? 0;
-          totalOutputTokens += response.usage?.completion_tokens ?? 0;
-
-          const choice = response.choices[0];
-          const message = choice.message;
-
-          if (!message.tool_calls?.length) {
-            // Final response — stream it to the client
-            const text = message.content ?? '';
-            onChunk(text, false);
-            onChunk('', true);
-            fullResponse = text;
-            break;
-          }
-
-          // Add the assistant message with tool_calls
-          currentMessages = [
-            ...currentMessages,
-            message,
-          ];
-
-          // Execute tools and loop
-          for (const toolCall of message.tool_calls) {
-            toolCallCount++;
-
-            const toolName = toolCall.function.name;
-            const toolArgs = JSON.parse(toolCall.function.arguments);
-
-            // Track tool usage
-            toolsUsed.push(toolName);
-            if (toolName === 'clickhouse_query' && toolArgs.sql) {
-              sqlQueries.push(toolArgs.sql);
-            }
-
-            let result: string;
-            try {
-              result = await this.executeTool(toolName, toolArgs, tenant);
-            } catch {
-              result = JSON.stringify({ error: 'Erro ao executar consulta' });
-            }
-
-            currentMessages = [
-              ...currentMessages,
-              {
-                role: 'tool' as const,
-                tool_call_id: toolCall.id,
-                content: result,
-              },
-            ];
-          }
-
-          continue;
-        }
-
-        // Final streaming response after tools exhausted
-        const stream = await this.openai.chat.completions.create({
+    while (true) {
+      // Check if we still have tool budget — if yes, use non-streaming for tool loop
+      if (toolCallCount < this.maxToolCalls) {
+        const response = await this.anthropic.messages.create({
           model: this.model,
           max_tokens: 4096,
+          system: systemPrompt,
+          tools: agentTools,
           messages: currentMessages,
-          stream: true,
-          stream_options: { include_usage: true },
         });
 
-        for await (const chunk of stream) {
-          // Usage comes in the final chunk
-          if (chunk.usage) {
-            totalInputTokens += chunk.usage.prompt_tokens;
-            totalOutputTokens += chunk.usage.completion_tokens;
-          }
+        // Track token usage
+        totalInputTokens += response.usage.input_tokens;
+        totalOutputTokens += response.usage.output_tokens;
 
-          const delta = chunk.choices[0]?.delta;
-          if (delta?.content) {
-            fullResponse += delta.content;
-            onChunk(delta.content, false);
-          }
+        const textParts: string[] = [];
+        const toolUseBlocks: Anthropic.ContentBlockParam[] = [];
+
+        for (const block of response.content) {
+          if (block.type === 'text') textParts.push(block.text);
+          else if (block.type === 'tool_use') toolUseBlocks.push(block);
         }
 
-        onChunk('', true);
-        break;
+        if (toolUseBlocks.length === 0) {
+          // Final response — stream it to the client
+          const text = textParts.join('\n');
+          onChunk(text, false);  // Send text first
+          onChunk('', true);      // Then send done signal
+          fullResponse = text;
+          break;
+        }
+
+        // Execute tools and loop
+        const assistantContent: Anthropic.ContentBlockParam[] = response.content.map(block => {
+          if (block.type === 'text') return { type: 'text' as const, text: block.text };
+          if (block.type === 'tool_use') return {
+            type: 'tool_use' as const,
+            id: block.id,
+            name: block.name,
+            input: block.input,
+          };
+          return block as Anthropic.ContentBlockParam;
+        });
+
+        currentMessages = [
+          ...currentMessages,
+          { role: 'assistant' as const, content: assistantContent },
+        ];
+
+        for (const block of toolUseBlocks) {
+          if (block.type !== 'tool_use') continue;
+          toolCallCount++;
+
+          // Track tool usage
+          toolsUsed.push(block.name);
+          if (block.name === 'clickhouse_query' && (block.input as Record<string, unknown>).sql) {
+            sqlQueries.push((block.input as Record<string, unknown>).sql as string);
+          }
+
+          let result: string;
+          try {
+            result = await this.executeTool(block.name, block.input as Record<string, unknown>, tenant);
+          } catch {
+            result = JSON.stringify({ error: 'Erro ao executar consulta' });
+          }
+
+          currentMessages = [
+            ...currentMessages,
+            {
+              role: 'user' as const,
+              content: [{
+                type: 'tool_result' as const,
+                tool_use_id: block.id,
+                content: result,
+              }],
+            },
+          ];
+        }
+
+        continue;
       }
-    } catch (err) {
-      fullResponse = this.handleApiError(err);
-      onChunk(fullResponse, false);
+
+      // Final streaming response after tools exhausted
+      const stream = this.anthropic.messages.stream({
+        model: this.model,
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: currentMessages,
+      });
+
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          fullResponse += event.delta.text;
+          onChunk(event.delta.text, false);
+        }
+      }
+
+      // Get final message with usage stats
+      const finalMessage = await stream.finalMessage();
+      totalInputTokens += finalMessage.usage.input_tokens;
+      totalOutputTokens += finalMessage.usage.output_tokens;
+
       onChunk('', true);
+      break;
     }
 
     this.conversations.addMessage(conv.id, {
@@ -551,16 +560,13 @@ export class IrisAgent {
   }
 
   /**
-   * Convert our ChatMessage[] to OpenAI's message format, with system prompt as first message.
+   * Convert our ChatMessage[] to Anthropic's message format.
    */
-  private buildOpenAIMessages(systemPrompt: string, messages: ChatMessage[]): OpenAI.ChatCompletionMessageParam[] {
-    return [
-      { role: 'system', content: systemPrompt },
-      ...messages.map(m => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      })),
-    ];
+  private buildAnthropicMessages(messages: ChatMessage[]): Anthropic.MessageParam[] {
+    return messages.map(m => ({
+      role: m.role,
+      content: m.content,
+    }));
   }
 
   /**

@@ -1,15 +1,13 @@
-import type OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 
 /**
  * Tool definitions that the IRIS agent can use.
  * Currently only clickhouse_query — the agent writes SQL and we execute it.
  */
-export const agentTools: OpenAI.ChatCompletionTool[] = [
+export const agentTools: Anthropic.Tool[] = [
   {
-    type: 'function',
-    function: {
-      name: 'clickhouse_query',
-      description: `Execute a read-only SQL query against the ClickHouse database.
+    name: 'clickhouse_query',
+    description: `Execute a read-only SQL query against the ClickHouse database.
 The query MUST:
 - Be a SELECT statement only
 - Include the tenant filter in the WHERE clause
@@ -18,23 +16,20 @@ The query MUST:
 
 Return format: array of JSON objects (one per row).
 Maximum 500 rows returned.`,
-      parameters: {
-        type: 'object' as const,
-        properties: {
-          sql: {
-            type: 'string',
-            description: 'The SQL SELECT query to execute',
-          },
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        sql: {
+          type: 'string',
+          description: 'The SQL SELECT query to execute',
         },
-        required: ['sql'],
       },
+      required: ['sql'],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'generate_csv',
-      description: `Gera um arquivo CSV para download pelo usuário.
+    name: 'generate_csv',
+    description: `Gera um arquivo CSV para download pelo usuário.
 Use quando o usuário pedir para exportar dados como CSV, planilha, Excel ou download.
 
 IMPORTANTE:
@@ -51,26 +46,25 @@ qtestoque → Estoque (un), cobertura → Cobertura (dias),
 mediaf_un → Média Diária (un), vlrcusto → Custo Unitário (R$),
 dias_parado → Dias Parado, dias_falta → Dias em Falta,
 nomefabricante → Fabricante, curva → Curva, linha → Linha`,
-      parameters: {
-        type: 'object' as const,
-        properties: {
-          columns: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Array ordenado de nomes de colunas (viram o cabeçalho do CSV)',
-          },
-          data: {
-            type: 'array',
-            items: { type: 'object' },
-            description: 'Array de objetos com os dados. Chaves devem corresponder ao array columns.',
-          },
-          filename: {
-            type: 'string',
-            description: 'Nome sugerido do arquivo sem extensão (ex: "balanceamento_produto_1001")',
-          },
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        columns: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array ordenado de nomes de colunas (viram o cabeçalho do CSV)',
         },
-        required: ['columns', 'data'],
+        data: {
+          type: 'array',
+          items: { type: 'object' },
+          description: 'Array de objetos com os dados. Chaves devem corresponder ao array columns.',
+        },
+        filename: {
+          type: 'string',
+          description: 'Nome sugerido do arquivo sem extensão (ex: "balanceamento_produto_1001")',
+        },
       },
+      required: ['columns', 'data'],
     },
   },
 ];
