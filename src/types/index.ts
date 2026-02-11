@@ -83,8 +83,10 @@ export interface IrisConfig {
   };
   /** Optional: provide rules externally instead of from DB */
   rules?: BalancingRule[];
-  /** Max tool calls per user message (default: 2) */
+  /** Max tool calls per user message (default: 3) */
   maxToolCalls?: number;
+  /** Base URL for download links (default: http://localhost:3030) */
+  baseUrl?: string;
 }
 
 /** Streaming callback for SSE responses */

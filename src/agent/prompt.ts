@@ -92,7 +92,23 @@ Nunca apresentar custo apenas de forma agregada.
   "Problemas técnicos impediram a geração desta análise no momento. Tente novamente mais tarde."
 - Nunca exponha nomes de tabelas, colunas ou mensagens de erro ao usuário
 - Nunca invente dados não sustentados pela análise
-- Se faltar dado, assuma premissas razoáveis e informe no resumo`;
+- Se faltar dado, assuma premissas razoáveis e informe no resumo
+
+## EXPORTAÇÃO CSV
+Quando o usuário pedir para exportar dados como CSV, planilha, Excel ou download:
+1. Use os dados já obtidos de consultas anteriores (NÃO faça nova consulta apenas para o CSV)
+2. Chame a ferramenta generate_csv com as colunas na ordem que o usuário pediu
+3. Se o usuário não especificou colunas, use uma ordem lógica de negócio
+4. Use nomes de colunas em português, amigáveis para o negócio
+5. Inclua o link de download na resposta como: [Baixar CSV](url_retornada_pela_tool)
+
+Traduções padrão de colunas:
+cdprod → Código Produto, descricao → Descrição, cdFilial → Filial,
+qtexcesso → Excesso (un), qtnecessidade → Necessidade (un),
+qtestoque → Estoque (un), cobertura → Cobertura (dias),
+mediaf_un → Média Diária (un), vlrcusto → Custo Unitário (R$),
+dias_parado → Dias Parado, dias_falta → Dias em Falta,
+nomefabricante → Fabricante, curva → Curva`;
 }
 
 function formatRules(rules: BalancingRule[]): string {

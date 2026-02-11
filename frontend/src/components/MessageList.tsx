@@ -42,15 +42,44 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
             }`}
           >
             <div
-              className={`max-w-[80%] rounded-lg px-4 py-3 ${
+              className={`rounded-lg px-4 py-3 ${
                 msg.role === 'user'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white border border-gray-200 text-gray-800'
+                  ? 'max-w-[80%] bg-blue-600 text-white'
+                  : 'max-w-[95%] bg-white border border-gray-200 text-gray-800'
               }`}
             >
               {msg.role === 'assistant' ? (
-                <div className="prose prose-sm max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <div className="prose prose-sm max-w-none overflow-x-auto">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      a: ({ href, children, ...props }) => {
+                        if (href && href.includes('/api/iris/download/csv/')) {
+                          return (
+                            <a
+                              href={href}
+                              className="not-prose inline-flex items-center gap-2 px-5 py-2.5 mt-3 mb-1 rounded-lg transition-colors no-underline font-bold text-base text-white shadow-sm"
+                              style={{ backgroundColor: '#1B5E20', color: '#ffffff' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#154a19')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#1B5E20')}
+                              download
+                              {...props}
+                            >
+                              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                              Baixar CSV
+                            </a>
+                          );
+                        }
+                        return (
+                          <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" {...props}>
+                            {children}
+                          </a>
+                        );
+                      },
+                    }}
+                  >
                     {msg.content}
                   </ReactMarkdown>
                 </div>

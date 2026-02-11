@@ -53,9 +53,10 @@ async function main() {
   app.listen(PORT, () => {
     console.log(`[Iris Balanceamento] Server running on port ${PORT}`);
     console.log(`[Iris Balanceamento] Endpoints:`);
-    console.log(`  POST /api/iris/chat         - Chat (request/response)`);
-    console.log(`  POST /api/iris/chat/stream   - Chat (SSE streaming)`);
-    console.log(`  GET  /api/iris/conversations  - List conversations`);
+    console.log(`  POST /api/iris/chat             - Chat (request/response)`);
+    console.log(`  POST /api/iris/chat/stream       - Chat (SSE streaming)`);
+    console.log(`  GET  /api/iris/conversations     - List conversations`);
+    console.log(`  GET  /api/iris/download/csv/:id  - Download CSV`);
   });
 
   // Graceful shutdown

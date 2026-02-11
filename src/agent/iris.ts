@@ -8,6 +8,8 @@ import { ConversationLogger } from '../tracking/conversation-logger';
 import { SessionManager } from '../rules/session-manager';
 import { RuleTrainerAgent } from './rule-trainer';
 import { LoadRulesSkill } from '../rules/load-rules-skill';
+import { CsvStore } from '../csv/csv-store';
+import { generateCsv } from '../csv/csv-generator';
 import {
   IrisConfig,
   TenantContext,
@@ -28,6 +30,8 @@ export class IrisAgent {
   private sessionManager: SessionManager;
   private ruleTrainer: RuleTrainerAgent;
   private loadRulesSkill: LoadRulesSkill;
+  private csvStore: CsvStore;
+  private baseUrl: string;
 
   // TEMPORARY: Fixed tenant for development until multi-tenant filtering is properly implemented
   private readonly FIXED_TENANT_ID = '33F6E320-F59E-4E43-99C2-2D6748A64B04';
@@ -47,12 +51,14 @@ export class IrisAgent {
     this.clickhouse = new ClickHouseService(config.clickhouse);
     this.conversations = new ConversationManager();
     this.rules = config.rules ?? [];
-    this.maxToolCalls = config.maxToolCalls ?? 2;
+    this.maxToolCalls = config.maxToolCalls ?? 3;
     this.usageTracker = new UsageTracker(this.clickhouse);
     this.conversationLogger = new ConversationLogger(this.clickhouse);
     this.sessionManager = new SessionManager(this.clickhouse);
     this.ruleTrainer = new RuleTrainerAgent(this.clickhouse, this.sessionManager, this.conversations);
     this.loadRulesSkill = new LoadRulesSkill(this.clickhouse);
+    this.csvStore = new CsvStore();
+    this.baseUrl = config.baseUrl ?? `http://localhost:${process.env.PORT ?? 3030}`;
   }
 
   /** Get usage tracker instance */
@@ -63,6 +69,11 @@ export class IrisAgent {
   /** Get conversation logger instance */
   getConversationLogger(): ConversationLogger {
     return this.conversationLogger;
+  }
+
+  /** Get CSV store instance for download endpoint */
+  getCsvStore(): CsvStore {
+    return this.csvStore;
   }
 
   /**
@@ -522,6 +533,29 @@ export class IrisAgent {
       const rows = await this.clickhouse.query(sql, fixedTenant);
       return JSON.stringify(rows);
     }
+
+    if (name === 'generate_csv') {
+      const columns = input.columns as string[];
+      const data = input.data as Record<string, unknown>[];
+      const filename = (input.filename as string) || 'exportacao';
+
+      if (!columns?.length || !Array.isArray(data)) {
+        return JSON.stringify({ error: 'columns e data são obrigatórios' });
+      }
+
+      const csvContent = generateCsv(columns, data);
+      const csvId = this.csvStore.save(csvContent, `${filename}.csv`);
+      const downloadUrl = `${this.baseUrl}/api/iris/download/csv/${csvId}`;
+
+      return JSON.stringify({
+        success: true,
+        url: downloadUrl,
+        filename: `${filename}.csv`,
+        rows: data.length,
+        columns: columns.length,
+      });
+    }
+
     return JSON.stringify({ error: `Unknown tool: ${name}` });
   }
 
@@ -565,6 +599,7 @@ export class IrisAgent {
 
   /** Clean up resources */
   async destroy(): Promise<void> {
+    this.csvStore.destroy();
     await this.clickhouse.close();
   }
 }

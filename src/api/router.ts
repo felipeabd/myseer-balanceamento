@@ -10,7 +10,22 @@ import { ChatRequest } from '../types';
 export function createIrisRouter(agent: IrisAgent): Router {
   const router = Router();
 
-  // All routes require tenant context
+  // CSV download endpoint (before tenant middleware — UUID acts as auth token)
+  router.get('/download/csv/:id', (req: Request, res: Response) => {
+    const csvStore = agent.getCsvStore();
+    const entry = csvStore.get(req.params.id as string);
+
+    if (!entry) {
+      res.status(404).json({ error: 'CSV não encontrado ou expirado' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${entry.filename}"`);
+    res.send(entry.content);
+  });
+
+  // All routes below require tenant context
   router.use(tenantMiddleware);
 
   /**
