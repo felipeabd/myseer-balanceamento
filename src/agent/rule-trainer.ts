@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { ClickHouseService } from '../clickhouse/client';
 import { SessionManager } from '../rules/session-manager';
 import { ConversationManager } from '../conversation/manager';
@@ -10,21 +10,21 @@ export interface TenantContext {
 }
 
 export class RuleTrainerAgent {
-  private anthropic: Anthropic;
+  private openai: OpenAI;
   private clickhouse: ClickHouseService;
   private sessionManager: SessionManager;
   private conversations: ConversationManager;
-  private model = 'claude-haiku-4-5';
+  private model = 'gpt-4o-mini';
 
   constructor(clickhouse: ClickHouseService, sessionManager: SessionManager, conversations: ConversationManager) {
-    this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000 });
     this.clickhouse = clickhouse;
     this.sessionManager = sessionManager;
     this.conversations = conversations;
   }
 
   private getSystemPrompt(): string {
-    return `# 🧠 IRIS — AGENTE DE TREINAMENTO DE REGRAS (BALANCEAMENTO)
+    return `# IRIS — AGENTE DE TREINAMENTO DE REGRAS (BALANCEAMENTO)
 
 ## PAPEL
 Você é o agente responsável por TREINAR e CADASTRAR regras de balanceamento de estoque.
@@ -199,134 +199,150 @@ Quando o usuário pedir para CORRIGIR, REFAZER ou ALTERAR uma regra:
 `;
   }
 
+  private getRuleTrainerTools(): OpenAI.ChatCompletionTool[] {
+    return [
+      {
+        type: 'function',
+        function: {
+          name: 'SalvarRegra',
+          description: 'Salva uma nova regra de balanceamento no banco de dados',
+          parameters: {
+            type: 'object',
+            properties: {
+              tenant: {
+                type: 'string',
+                description: 'UUID do tenant ou "null" para regra global',
+              },
+              escopo: {
+                type: 'string',
+                enum: ['balanceamento'],
+                description: 'Escopo da regra',
+              },
+              tipo: {
+                type: 'string',
+                enum: ['bloqueio', 'limite', 'prioridade', 'excecao'],
+                description: 'Tipo da regra',
+              },
+              status: {
+                type: 'string',
+                enum: ['ativo', 'inativo'],
+                description: 'Status da regra',
+              },
+              prioridade: {
+                type: 'integer',
+                description: '1-9: crítico, 10-19: limite, 20-29: prioridade, 30-39: heurística',
+              },
+              alvo: {
+                type: 'object',
+                description: 'JSON com quem a regra afeta',
+              },
+              condicao: {
+                type: 'object',
+                description: 'JSON com quando a regra se aplica',
+              },
+              acao: {
+                type: 'object',
+                description: 'JSON com efeito da regra',
+              },
+              texto: {
+                type: 'string',
+                description: 'Descrição em linguagem de negócio',
+              },
+              criado_por: {
+                type: 'string',
+                description: 'Email do usuário',
+              },
+            },
+            required: ['tipo', 'prioridade', 'alvo', 'condicao', 'acao', 'texto', 'criado_por'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'ListarRegras',
+          description: 'Lista todas as regras ativas de balanceamento do tenant. Use para consultar regras existentes antes de atualizar.',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: [],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'AtualizarRegra',
+          description: 'Atualiza uma regra existente no banco de dados. Pode alterar qualquer campo: status, tipo, prioridade, alvo, condicao, acao, texto.',
+          parameters: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                description: 'ID (UUID) da regra a ser atualizada',
+              },
+              status: {
+                type: 'string',
+                enum: ['ativo', 'inativo'],
+                description: 'Novo status da regra',
+              },
+              tipo: {
+                type: 'string',
+                enum: ['bloqueio', 'limite', 'prioridade', 'excecao'],
+                description: 'Novo tipo da regra',
+              },
+              prioridade: {
+                type: 'integer',
+                description: 'Nova prioridade',
+              },
+              alvo: {
+                type: 'object',
+                description: 'Novo JSON de alvo',
+              },
+              condicao: {
+                type: 'object',
+                description: 'Novo JSON de condição',
+              },
+              acao: {
+                type: 'object',
+                description: 'Novo JSON de ação',
+              },
+              texto: {
+                type: 'string',
+                description: 'Nova descrição em linguagem de negócio',
+              },
+            },
+            required: ['id'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'AtualizarSessao',
+          description: 'Atualiza o status da sessão de treinamento. Use status=0 para encerrar o treinamento.',
+          parameters: {
+            type: 'object',
+            properties: {
+              status: {
+                type: 'integer',
+                enum: [0, 1],
+                description: '0 = encerrar treinamento, 1 = manter ativo',
+              },
+            },
+            required: ['status'],
+          },
+        },
+      },
+    ];
+  }
+
   async chat(
     userMessage: string,
     conversationId: string,
     tenant: TenantContext
   ): Promise<string> {
-    const tools: Anthropic.Tool[] = [
-      {
-        name: 'SalvarRegra',
-        description: 'Salva uma nova regra de balanceamento no banco de dados',
-        input_schema: {
-          type: 'object',
-          properties: {
-            tenant: {
-              type: 'string',
-              description: 'UUID do tenant ou "null" para regra global',
-            },
-            escopo: {
-              type: 'string',
-              enum: ['balanceamento'],
-              description: 'Escopo da regra',
-            },
-            tipo: {
-              type: 'string',
-              enum: ['bloqueio', 'limite', 'prioridade', 'excecao'],
-              description: 'Tipo da regra',
-            },
-            status: {
-              type: 'string',
-              enum: ['ativo', 'inativo'],
-              description: 'Status da regra',
-            },
-            prioridade: {
-              type: 'integer',
-              description: '1-9: crítico, 10-19: limite, 20-29: prioridade, 30-39: heurística',
-            },
-            alvo: {
-              type: 'object',
-              description: 'JSON com quem a regra afeta',
-            },
-            condicao: {
-              type: 'object',
-              description: 'JSON com quando a regra se aplica',
-            },
-            acao: {
-              type: 'object',
-              description: 'JSON com efeito da regra',
-            },
-            texto: {
-              type: 'string',
-              description: 'Descrição em linguagem de negócio',
-            },
-            criado_por: {
-              type: 'string',
-              description: 'Email do usuário',
-            },
-          },
-          required: ['tipo', 'prioridade', 'alvo', 'condicao', 'acao', 'texto', 'criado_por'],
-        },
-      },
-      {
-        name: 'ListarRegras',
-        description: 'Lista todas as regras ativas de balanceamento do tenant. Use para consultar regras existentes antes de atualizar.',
-        input_schema: {
-          type: 'object',
-          properties: {},
-          required: [],
-        },
-      },
-      {
-        name: 'AtualizarRegra',
-        description: 'Atualiza uma regra existente no banco de dados. Pode alterar qualquer campo: status, tipo, prioridade, alvo, condicao, acao, texto.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'string',
-              description: 'ID (UUID) da regra a ser atualizada',
-            },
-            status: {
-              type: 'string',
-              enum: ['ativo', 'inativo'],
-              description: 'Novo status da regra',
-            },
-            tipo: {
-              type: 'string',
-              enum: ['bloqueio', 'limite', 'prioridade', 'excecao'],
-              description: 'Novo tipo da regra',
-            },
-            prioridade: {
-              type: 'integer',
-              description: 'Nova prioridade',
-            },
-            alvo: {
-              type: 'object',
-              description: 'Novo JSON de alvo',
-            },
-            condicao: {
-              type: 'object',
-              description: 'Novo JSON de condição',
-            },
-            acao: {
-              type: 'object',
-              description: 'Novo JSON de ação',
-            },
-            texto: {
-              type: 'string',
-              description: 'Nova descrição em linguagem de negócio',
-            },
-          },
-          required: ['id'],
-        },
-      },
-      {
-        name: 'AtualizarSessao',
-        description: 'Atualiza o status da sessão de treinamento. Use status=0 para encerrar o treinamento.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            status: {
-              type: 'integer',
-              enum: [0, 1],
-              description: '0 = encerrar treinamento, 1 = manter ativo',
-            },
-          },
-          required: ['status'],
-        },
-      },
-    ];
+    const tools = this.getRuleTrainerTools();
 
     // Get or create conversation and add user message
     const conv = this.conversations.getOrCreate(conversationId, tenant);
@@ -337,60 +353,65 @@ Quando o usuário pedir para CORRIGIR, REFAZER ou ALTERAR uma regra:
     });
 
     // Build messages from conversation history
-    const messages = this.buildAnthropicMessages(conv.messages);
+    const messages: OpenAI.ChatCompletionMessageParam[] = [
+      { role: 'system', content: this.getSystemPrompt() },
+      ...conv.messages.map(msg => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+      })),
+    ];
 
     let iterations = 0;
     const maxIterations = 15;
     let finalResponse = '';
 
-    while (iterations < maxIterations) {
-      const response = await this.anthropic.messages.create({
-        model: this.model,
-        max_tokens: 4096,
-        system: this.getSystemPrompt(),
-        messages,
-        tools,
-      });
+    try {
+      while (iterations < maxIterations) {
+        const response = await this.openai.chat.completions.create({
+          model: this.model,
+          max_tokens: 4096,
+          messages,
+          tools,
+        });
 
-      // Se terminou sem usar tool
-      if (response.stop_reason === 'end_turn') {
-        const textBlocks = response.content.filter((c) => c.type === 'text');
-        finalResponse = textBlocks.map((b: any) => b.text).join('\n');
-        break;
-      }
+        const choice = response.choices[0];
+        const message = choice.message;
 
-      // Se usou tools
-      if (response.stop_reason === 'tool_use') {
-        messages.push({ role: 'assistant', content: response.content });
-
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-        for (const block of response.content) {
-          if (block.type === 'tool_use') {
-            let result: any;
-
-            if (block.name === 'SalvarRegra') {
-              result = await this.salvarRegra(block.input as any, tenant);
-            } else if (block.name === 'ListarRegras') {
-              result = await this.listarRegras(tenant);
-            } else if (block.name === 'AtualizarRegra') {
-              result = await this.atualizarRegra(block.input as any, tenant);
-            } else if (block.name === 'AtualizarSessao') {
-              result = await this.atualizarSessao(block.input as any, conversationId);
-            }
-
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: block.id,
-              content: JSON.stringify(result),
-            });
-          }
+        // If finished without tool calls
+        if (choice.finish_reason === 'stop' || !message.tool_calls?.length) {
+          finalResponse = message.content ?? '';
+          break;
         }
 
-        messages.push({ role: 'user', content: toolResults });
-      }
+        // If used tools — add assistant message first, then process tool calls
+        messages.push(message);
 
-      iterations++;
+        for (const toolCall of message.tool_calls) {
+          const toolArgs = JSON.parse(toolCall.function.arguments);
+          let result: any;
+
+          if (toolCall.function.name === 'SalvarRegra') {
+            result = await this.salvarRegra(toolArgs, tenant);
+          } else if (toolCall.function.name === 'ListarRegras') {
+            result = await this.listarRegras(tenant);
+          } else if (toolCall.function.name === 'AtualizarRegra') {
+            result = await this.atualizarRegra(toolArgs, tenant);
+          } else if (toolCall.function.name === 'AtualizarSessao') {
+            result = await this.atualizarSessao(toolArgs, conversationId);
+          }
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result),
+          });
+        }
+
+        iterations++;
+      }
+    } catch (err) {
+      console.error('[RuleTrainer] API error:', err);
+      finalResponse = 'Ocorreu um erro ao processar sua solicitação de regras. Por favor, tente novamente.';
     }
 
     if (iterations >= maxIterations) {
@@ -405,13 +426,6 @@ Quando o usuário pedir para CORRIGIR, REFAZER ou ALTERAR uma regra:
     });
 
     return finalResponse;
-  }
-
-  private buildAnthropicMessages(conversationMessages: any[]): Anthropic.MessageParam[] {
-    return conversationMessages.map(msg => ({
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content,
-    }));
   }
 
   private async salvarRegra(input: any, tenant: TenantContext): Promise<any> {

@@ -73,8 +73,8 @@ export interface ChatResponse {
 
 /** Configuration for the IRIS module */
 export interface IrisConfig {
-  anthropicApiKey: string;
-  anthropicModel?: string;
+  openaiApiKey: string;
+  openaiModel?: string;
   clickhouse: {
     url: string;
     database?: string;

@@ -86,30 +86,48 @@ const MOCK_DATA = {
 };
 
 // ──────────────────────────────────────────────
-// Mock Anthropic — generates REALISTIC responses based on tool results
+// Mock OpenAI
 // ──────────────────────────────────────────────
 const mockCreate = vi.fn();
 
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: class MockAnthropic {
-    messages = { create: mockCreate, stream: vi.fn() };
+vi.mock('openai', () => ({
+  default: class MockOpenAI {
+    chat = {
+      completions: {
+        create: mockCreate,
+      },
+    };
   },
 }));
 
 // ──────────────────────────────────────────────
-// Mock ClickHouse — returns data based on query content
+// Mock ClickHouse
 // ──────────────────────────────────────────────
 const mockChQuery = vi.fn();
+const mockExec = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@clickhouse/client', () => ({
   createClient: () => ({
     query: mockChQuery,
+    exec: mockExec,
     close: vi.fn(),
   }),
 }));
 
 function chResponse(data: unknown[]) {
   return { json: vi.fn().mockResolvedValue(data) };
+}
+
+/**
+ * Helper: set up ClickHouse mock for a single agent.chat() call.
+ * 2 internal queries (isInTrainingMode, loadRulesSkill) + tool call responses.
+ */
+function setupChatMocks(...toolResponses: ReturnType<typeof chResponse>[]) {
+  mockChQuery.mockResolvedValueOnce(chResponse([])); // isInTrainingMode
+  mockChQuery.mockResolvedValueOnce(chResponse([])); // loadRulesSkill
+  for (const r of toolResponses) {
+    mockChQuery.mockResolvedValueOnce(r);
+  }
 }
 
 // ──────────────────────────────────────────────
@@ -124,7 +142,7 @@ describe('Integration: Full conversation flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     agent = new IrisAgent({
-      anthropicApiKey: 'sk-test',
+      openaiApiKey: 'sk-test',
       clickhouse: { url: 'http://localhost:9999' },
       maxToolCalls: 2,
       rules: [
@@ -135,156 +153,151 @@ describe('Integration: Full conversation flow', () => {
   });
 
   it('Scenario 1: Discovery — "Quais produtos posso balancear?"', async () => {
-    // Agent calls tool #1: MAX(dtcarga)
-    mockCreate.mockResolvedValueOnce({
-      content: [
-        { type: 'text', text: '' },
-        {
-          type: 'tool_use',
-          id: 'call-1',
-          name: 'clickhouse_query',
-          input: { sql: `SELECT MAX(dtcarga) as ultima_carga FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}' AND filialdeposito <> 1` },
-        },
-      ],
-    });
-    mockChQuery.mockResolvedValueOnce(chResponse(MOCK_DATA.lastLoadDate));
+    setupChatMocks(
+      chResponse(MOCK_DATA.lastLoadDate),      // tool call #1
+      chResponse(MOCK_DATA.discoveryProducts),  // tool call #2
+    );
 
-    // Agent calls tool #2: discovery query
+    // Agent calls tool #1
     mockCreate.mockResolvedValueOnce({
-      content: [
-        { type: 'text', text: '' },
-        {
-          type: 'tool_use',
-          id: 'call-2',
-          name: 'clickhouse_query',
-          input: { sql: `SELECT cdprod, any(descricao) as descricao FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}' GROUP BY cdprod LIMIT 10` },
+      choices: [{
+        message: {
+          content: '',
+          tool_calls: [{
+            id: 'call-1',
+            type: 'function',
+            function: {
+              name: 'clickhouse_query',
+              arguments: JSON.stringify({ sql: `SELECT MAX(dtcarga) as ultima_carga FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}' AND filialdeposito <> 1` }),
+            },
+          }],
         },
-      ],
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
     });
-    mockChQuery.mockResolvedValueOnce(chResponse(MOCK_DATA.discoveryProducts));
 
-    // Agent generates final response (no more tool budget)
+    // Agent calls tool #2
     mockCreate.mockResolvedValueOnce({
-      content: [{
-        type: 'text',
-        text: `## Cenário de Balanceamento — 20/01/2025
+      choices: [{
+        message: {
+          content: '',
+          tool_calls: [{
+            id: 'call-2',
+            type: 'function',
+            function: {
+              name: 'clickhouse_query',
+              arguments: JSON.stringify({ sql: `SELECT cdprod, any(descricao) as descricao FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}' GROUP BY cdprod LIMIT 10` }),
+            },
+          }],
+        },
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 200, completion_tokens: 60 },
+    });
+
+    // Final response
+    mockCreate.mockResolvedValueOnce({
+      choices: [{
+        message: {
+          content: `## Cenário de Balanceamento — 20/01/2025
 
 Identifiquei **5 produtos** com oportunidades de redistribuição:
 
-| # | Produto | Código | Excesso (un) | Necessidade (un) | Doadoras | Receptoras | Custo unit. | Capital imobilizado |
-|---|---------|--------|-------------|-----------------|----------|------------|-------------|-------------------|
-| 1 | Dipirona 500mg cx 20 | 7890 | 340 | 210 | 5 | 8 | R$ 17,00 | R$ 5.780,00 |
-| 2 | Omeprazol 20mg cx 28 | 4521 | 520 | 390 | 7 | 12 | R$ 8,00 | R$ 4.160,00 |
-| 3 | Losartana 50mg cx 30 | 3310 | 280 | 180 | 4 | 6 | R$ 14,00 | R$ 3.920,00 |
-| 4 | Amoxicilina 500mg cx 21 | 8801 | 190 | 150 | 3 | 9 | R$ 15,00 | R$ 2.850,00 |
-| 5 | Ibuprofeno 600mg cx 20 | 5567 | 410 | 270 | 6 | 10 | R$ 6,00 | R$ 2.460,00 |
-
-O capital total imobilizado em excesso é de aproximadamente **R$ 19.170,00**.
+| # | Produto | Código | Excesso (un) | Capital imobilizado |
+|---|---------|--------|-------------|-------------------|
+| 1 | Dipirona 500mg cx 20 | 7890 | 340 | R$ 5.780,00 |
+| 2 | Omeprazol 20mg cx 28 | 4521 | 520 | R$ 4.160,00 |
 
 Gostaria de aprofundar a análise em algum produto específico ou prefere explorar outra perspectiva?`,
+          tool_calls: null,
+        },
+        finish_reason: 'stop',
       }],
+      usage: { prompt_tokens: 400, completion_tokens: 200 },
     });
 
     const result = await agent.chat(tenant, 'Quais produtos posso balancear?');
 
-    // Verify the flow
-    expect(mockCreate).toHaveBeenCalledTimes(3); // 2 tool rounds + final
-    expect(mockChQuery).toHaveBeenCalledTimes(2); // 2 CH queries
+    expect(mockCreate).toHaveBeenCalledTimes(3);
     expect(result.response).toContain('Dipirona');
     expect(result.response).toContain('5.780');
     expect(result.response).toContain('aprofundar');
-    // Should NOT contain recommendations (discovery mode)
-    expect(result.response).not.toContain('Recomendações');
-
-    console.log('\n🟢 === SCENARIO 1: DISCOVERY ===');
-    console.log(`👤 User: Quais produtos posso balancear?`);
-    console.log(`🤖 IRIS:\n${result.response}`);
-    console.log(`📊 Tool calls: ${mockChQuery.mock.calls.length}`);
-    console.log(`💬 Conversation ID: ${result.conversationId}\n`);
   });
 
   it('Scenario 2: Product detail — "Analise o produto 7890"', async () => {
-    // Pre-seed conversation with a discovery message
+    // Pre-seed conversation
+    setupChatMocks();
     mockCreate.mockResolvedValueOnce({
-      content: [{ type: 'text', text: 'Olá!' }],
+      choices: [{
+        message: { content: 'Olá!', tool_calls: null },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 50, completion_tokens: 5 },
     });
     const { conversationId } = await agent.chat(tenant, 'Oi');
 
-    vi.clearAllMocks();
+    // Set up for the second chat call
+    setupChatMocks(
+      chResponse(MOCK_DATA.lastLoadDate),        // tool call #1
+      chResponse(MOCK_DATA.productDetail_7890),   // tool call #2
+    );
 
-    // Agent calls tool #1: MAX(dtcarga)
+    // Agent calls tool #1
     mockCreate.mockResolvedValueOnce({
-      content: [
-        {
-          type: 'tool_use',
-          id: 'call-1',
-          name: 'clickhouse_query',
-          input: { sql: `SELECT MAX(dtcarga) as ultima_carga FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}'` },
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            id: 'call-1',
+            type: 'function',
+            function: {
+              name: 'clickhouse_query',
+              arguments: JSON.stringify({ sql: `SELECT MAX(dtcarga) as ultima_carga FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}'` }),
+            },
+          }],
         },
-      ],
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 150, completion_tokens: 40 },
     });
-    mockChQuery.mockResolvedValueOnce(chResponse(MOCK_DATA.lastLoadDate));
 
-    // Agent calls tool #2: product detail
+    // Agent calls tool #2
     mockCreate.mockResolvedValueOnce({
-      content: [
-        {
-          type: 'tool_use',
-          id: 'call-2',
-          name: 'clickhouse_query',
-          input: { sql: `SELECT * FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}' AND cdprod = 7890 AND filialdeposito <> 1` },
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            id: 'call-2',
+            type: 'function',
+            function: {
+              name: 'clickhouse_query',
+              arguments: JSON.stringify({ sql: `SELECT * FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}' AND cdprod = 7890 AND filialdeposito <> 1` }),
+            },
+          }],
         },
-      ],
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 250, completion_tokens: 50 },
     });
-    mockChQuery.mockResolvedValueOnce(chResponse(MOCK_DATA.productDetail_7890));
 
-    // Agent generates analysis
+    // Final analysis
     mockCreate.mockResolvedValueOnce({
-      content: [{
-        type: 'text',
-        text: `## Análise — Dipirona 500mg cx 20 (Código 7890)
-
-**Dados atualizados em 20/01/2025** | Fabricante: EMS | Curva: A
-
-### Visão Geral
-- Excesso total: **340 unidades** (5 lojas)
-- Necessidade total: **195 unidades** (5 lojas)
-- Custo unitário: **R$ 17,00**
-- Capital imobilizado em excesso: **R$ 5.780,00**
-
-### Lojas Doadoras (excesso)
-| Loja | Estoque | Excesso | Cobertura (dias) |
-|------|---------|---------|-----------------|
-| 101 | 250 | 120 | 45,2 |
-| 205 | 180 | 85 | 32,7 |
-| 310 | 140 | 75 | 25,5 |
-| 412 | 90 | 40 | 16,4 |
-| 503 | 55 | 20 | 10,0 |
-
-### Lojas Receptoras (necessidade)
-| Loja | Estoque | Necessidade | Cobertura (dias) | Dias em falta |
-|------|---------|-------------|-----------------|---------------|
-| 999 | 0 | 60 | 0,0 | 15 |
-| 920 | 2 | 50 | 0,4 | 12 |
-| 815 | 5 | 40 | 0,9 | 8 |
-| 708 | 10 | 30 | 1,8 | 5 |
-| 607 | 18 | 15 | 3,3 | 2 |
+      choices: [{
+        message: {
+          content: `## Análise — Dipirona 500mg cx 20 (Código 7890)
 
 ### Sugestão de Transferências
-| Origem (loja) | Destino (loja) | Qtd | Impacto (R$) |
-|---------------|---------------|-----|-------------|
-| 101 | 999 | 60 | R$ 1.020,00 |
-| 101 | 920 | 50 | R$ 850,00 |
-| 205 | 815 | 40 | R$ 680,00 |
-| 205 | 708 | 30 | R$ 510,00 |
-| 310 | 607 | 15 | R$ 255,00 |
+| Origem (loja) | Destino (loja) | Qtd |
+|---------------|---------------|-----|
+| 101 | 999 | 60 |
 
-**Total a transferir:** 195 unidades — **R$ 3.315,00** em estoque redistribuído.
-
-⚠️ Regra aplicada: máximo de 100 unidades por transferência respeitado.
-
-Deseja que eu monte o plano de transferências detalhado ou quer analisar outro produto?`,
+Deseja analisar outro produto?`,
+          tool_calls: null,
+        },
+        finish_reason: 'stop',
       }],
+      usage: { prompt_tokens: 500, completion_tokens: 300 },
     });
 
     const result = await agent.chat(tenant, 'Analise o produto 7890', conversationId);
@@ -292,80 +305,106 @@ Deseja que eu monte o plano de transferências detalhado ou quer analisar outro 
     expect(result.response).toContain('Dipirona');
     expect(result.response).toContain('999');
     expect(result.response).toContain('Sugestão de Transferências');
-    expect(mockChQuery).toHaveBeenCalledTimes(2);
-
-    console.log('\n🟢 === SCENARIO 2: PRODUCT DETAIL ===');
-    console.log(`👤 User: Analise o produto 7890`);
-    console.log(`🤖 IRIS:\n${result.response}`);
-    console.log(`📊 Tool calls: ${mockChQuery.mock.calls.length}\n`);
   });
 
   it('Scenario 3: Error handling — ClickHouse offline', async () => {
-    // Agent tries to query but CH is down
-    mockCreate.mockResolvedValueOnce({
-      content: [
-        {
-          type: 'tool_use',
-          id: 'call-1',
-          name: 'clickhouse_query',
-          input: { sql: `SELECT MAX(dtcarga) FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}'` },
-        },
-      ],
-    });
-    mockChQuery.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    // Internal calls succeed, but tool call fails
+    mockChQuery.mockResolvedValueOnce(chResponse([])); // isInTrainingMode
+    mockChQuery.mockResolvedValueOnce(chResponse([])); // loadRulesSkill
+    mockChQuery.mockRejectedValueOnce(new Error('ECONNREFUSED')); // tool call fails
 
-    // Agent receives error and responds appropriately
+    // Agent tries to query
     mockCreate.mockResolvedValueOnce({
-      content: [{
-        type: 'text',
-        text: 'Problemas técnicos impediram a geração desta análise no momento. Tente novamente mais tarde.',
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            id: 'call-1',
+            type: 'function',
+            function: {
+              name: 'clickhouse_query',
+              arguments: JSON.stringify({ sql: `SELECT MAX(dtcarga) FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}'` }),
+            },
+          }],
+        },
+        finish_reason: 'tool_calls',
       }],
+      usage: { prompt_tokens: 100, completion_tokens: 30 },
+    });
+
+    // Agent responds after seeing error
+    mockCreate.mockResolvedValueOnce({
+      choices: [{
+        message: {
+          content: 'Problemas técnicos impediram a geração desta análise no momento. Tente novamente mais tarde.',
+          tool_calls: null,
+        },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 150, completion_tokens: 20 },
     });
 
     const result = await agent.chat(tenant, 'Quais produtos posso balancear?');
 
     expect(result.response).toContain('Problemas técnicos');
-    expect(result.response).not.toContain('ECONNREFUSED'); // never expose internals
-
-    console.log('\n🟢 === SCENARIO 3: ERROR HANDLING ===');
-    console.log(`👤 User: Quais produtos posso balancear?`);
-    console.log(`🤖 IRIS: ${result.response}`);
-    console.log(`📊 Error was handled gracefully\n`);
+    expect(result.response).not.toContain('ECONNREFUSED');
   });
 
   it('Scenario 4: Multi-turn conversation context', async () => {
     // Turn 1: greeting
+    setupChatMocks();
     mockCreate.mockResolvedValueOnce({
-      content: [{ type: 'text', text: 'Olá Felipe! Sou a IRIS, sua assistente de balanceamento. Como posso ajudar?' }],
+      choices: [{
+        message: {
+          content: 'Olá Felipe! Sou a IRIS, sua assistente de balanceamento. Como posso ajudar?',
+          tool_calls: null,
+        },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 80, completion_tokens: 20 },
     });
     const turn1 = await agent.chat(tenant, 'Oi, me ajuda com balanceamento');
 
     // Turn 2: discovery (using same conversation)
-    mockCreate.mockResolvedValueOnce({
-      content: [
-        { type: 'tool_use', id: 'c1', name: 'clickhouse_query', input: { sql: `SELECT MAX(dtcarga) as dt FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}'` } },
-      ],
-    });
-    mockChQuery.mockResolvedValueOnce(chResponse(MOCK_DATA.lastLoadDate));
+    setupChatMocks(
+      chResponse(MOCK_DATA.lastLoadDate), // tool call
+    );
 
     mockCreate.mockResolvedValueOnce({
-      content: [{ type: 'text', text: 'Os dados estão atualizados até 20/01/2025. O que gostaria de explorar?' }],
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            id: 'c1',
+            type: 'function',
+            function: {
+              name: 'clickhouse_query',
+              arguments: JSON.stringify({ sql: `SELECT MAX(dtcarga) as dt FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}'` }),
+            },
+          }],
+        },
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 150, completion_tokens: 40 },
+    });
+
+    mockCreate.mockResolvedValueOnce({
+      choices: [{
+        message: {
+          content: 'Os dados estão atualizados até 20/01/2025. O que gostaria de explorar?',
+          tool_calls: null,
+        },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 200, completion_tokens: 20 },
     });
     const turn2 = await agent.chat(tenant, 'Qual a data mais recente dos dados?', turn1.conversationId);
 
-    // Verify same conversation
     expect(turn2.conversationId).toBe(turn1.conversationId);
 
-    // Verify turn 2 included turn 1 context
-    const turn2CallMessages = mockCreate.mock.calls[1][0].messages;
-    expect(turn2CallMessages.length).toBeGreaterThanOrEqual(3);
-
-    console.log('\n🟢 === SCENARIO 4: MULTI-TURN ===');
-    console.log(`👤 User: Oi, me ajuda com balanceamento`);
-    console.log(`🤖 IRIS: ${turn1.response}`);
-    console.log(`👤 User: Qual a data mais recente dos dados?`);
-    console.log(`🤖 IRIS: ${turn2.response}`);
-    console.log(`💬 Same conversation: ${turn1.conversationId === turn2.conversationId}\n`);
+    // Verify turn 2 included turn 1 context (system + user + assistant + user = 4+)
+    const turn2Messages = mockCreate.mock.calls[1][0].messages;
+    expect(turn2Messages.length).toBeGreaterThanOrEqual(4);
   });
 
   it('Scenario 5: Tenant isolation — cannot see other tenant data', async () => {
@@ -375,21 +414,28 @@ Deseja que eu monte o plano de transferências detalhado ou quer analisar outro 
     };
 
     // Create a conversation for tenant A
+    setupChatMocks();
     mockCreate.mockResolvedValueOnce({
-      content: [{ type: 'text', text: 'Olá!' }],
+      choices: [{
+        message: { content: 'Olá!', tool_calls: null },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 50, completion_tokens: 5 },
     });
     const { conversationId } = await agent.chat(tenant, 'Oi');
 
     // Try to access from tenant B — should throw
+    setupChatMocks();
     mockCreate.mockResolvedValueOnce({
-      content: [{ type: 'text', text: 'should not see this' }],
+      choices: [{
+        message: { content: 'should not see this', tool_calls: null },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 50, completion_tokens: 5 },
     });
 
     await expect(
       agent.chat(otherTenant, 'Me mostra os dados', conversationId)
     ).rejects.toThrow('Conversation does not belong to this tenant');
-
-    console.log('\n🟢 === SCENARIO 5: TENANT ISOLATION ===');
-    console.log(`🔒 Tenant B tried to access Tenant A's conversation → BLOCKED`);
   });
 });

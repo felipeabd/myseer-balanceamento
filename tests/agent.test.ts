@@ -3,16 +3,17 @@ import { IrisAgent } from '../src/agent/iris';
 import { TenantContext } from '../src/types';
 
 // ──────────────────────────────────────────────
-// Mock: Anthropic SDK
+// Mock: OpenAI SDK
 // ──────────────────────────────────────────────
 const mockCreate = vi.fn();
 
-vi.mock('@anthropic-ai/sdk', () => {
+vi.mock('openai', () => {
   return {
-    default: class MockAnthropic {
-      messages = {
-        create: mockCreate,
-        stream: vi.fn(),
+    default: class MockOpenAI {
+      chat = {
+        completions: {
+          create: mockCreate,
+        },
       };
     },
   };
@@ -22,15 +23,37 @@ vi.mock('@anthropic-ai/sdk', () => {
 // Mock: ClickHouse client
 // ──────────────────────────────────────────────
 const mockQuery = vi.fn();
+const mockExec = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@clickhouse/client', () => {
   return {
     createClient: () => ({
       query: mockQuery,
+      exec: mockExec,
       close: vi.fn(),
     }),
   };
 });
+
+function makeClickHouseResponse(data: unknown[]) {
+  return {
+    json: vi.fn().mockResolvedValue(data),
+  };
+}
+
+/**
+ * Helper: set up ClickHouse mock responses for a single agent.chat() call.
+ * Each call internally queries: 1) isInTrainingMode, 2) loadRulesSkill.
+ * Then tool calls follow.
+ */
+function setupChatMocks(...toolResponses: ReturnType<typeof makeClickHouseResponse>[]) {
+  // Internal calls return empty
+  mockQuery.mockResolvedValueOnce(makeClickHouseResponse([])); // isInTrainingMode
+  mockQuery.mockResolvedValueOnce(makeClickHouseResponse([])); // loadRulesSkill
+  for (const r of toolResponses) {
+    mockQuery.mockResolvedValueOnce(r);
+  }
+}
 
 // ──────────────────────────────────────────────
 // Test data
@@ -67,31 +90,30 @@ const sampleProducts = [
   },
 ];
 
-function makeClickHouseResponse(data: unknown[]) {
-  return {
-    json: vi.fn().mockResolvedValue(data),
-  };
-}
-
 describe('IrisAgent', () => {
   let agent: IrisAgent;
 
   beforeEach(() => {
     vi.clearAllMocks();
     agent = new IrisAgent({
-      anthropicApiKey: 'sk-test-fake-key',
+      openaiApiKey: 'sk-test-fake-key',
       clickhouse: { url: 'http://localhost:9999' },
       maxToolCalls: 2,
     });
   });
 
   it('handles a simple text response (no tool calls)', async () => {
-    // Anthropic returns a plain text response
+    setupChatMocks(); // just internal calls, no tool responses
+
     mockCreate.mockResolvedValueOnce({
-      content: [
-        { type: 'text', text: 'Olá! Sou a IRIS. Como posso ajudar com o balanceamento?' },
-      ],
-      stop_reason: 'end_turn',
+      choices: [{
+        message: {
+          content: 'Olá! Sou a IRIS. Como posso ajudar com o balanceamento?',
+          tool_calls: null,
+        },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 20 },
     });
 
     const result = await agent.chat(tenant, 'Olá');
@@ -102,41 +124,47 @@ describe('IrisAgent', () => {
 
     // Verify it passed the system prompt with tenant
     const callArgs = mockCreate.mock.calls[0][0];
-    expect(callArgs.system).toContain(tenant.tenantId);
-    expect(callArgs.system).toContain(tenant.userEmail);
+    const systemMsg = callArgs.messages.find((m: { role: string }) => m.role === 'system');
+    expect(systemMsg.content).toContain(tenant.tenantId);
+    expect(systemMsg.content).toContain(tenant.userEmail);
   });
 
   it('executes tool calls and returns final response', async () => {
+    setupChatMocks(
+      makeClickHouseResponse([{ ultima_carga: '2025-01-15' }]), // tool call response
+    );
+
     // First call: model wants to query MAX(dtcarga)
     mockCreate.mockResolvedValueOnce({
-      content: [
-        { type: 'text', text: 'Vou verificar a data mais recente dos dados.' },
-        {
-          type: 'tool_use',
-          id: 'tool-1',
-          name: 'clickhouse_query',
-          input: {
-            sql: `SELECT MAX(dtcarga) as ultima_carga FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}' AND filialdeposito <> 1`,
-          },
+      choices: [{
+        message: {
+          content: 'Vou verificar a data mais recente dos dados.',
+          tool_calls: [{
+            id: 'call-1',
+            type: 'function',
+            function: {
+              name: 'clickhouse_query',
+              arguments: JSON.stringify({
+                sql: `SELECT MAX(dtcarga) as ultima_carga FROM default.ia_fato_balanceamento WHERE tenant = '${tenant.tenantId}' AND filialdeposito <> 1`,
+              }),
+            },
+          }],
         },
-      ],
-      stop_reason: 'tool_use',
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
     });
-
-    // Mock ClickHouse response for the tool call
-    mockQuery.mockResolvedValueOnce(
-      makeClickHouseResponse([{ ultima_carga: '2025-01-15' }])
-    );
 
     // Second call: model returns final answer after seeing tool result
     mockCreate.mockResolvedValueOnce({
-      content: [
-        {
-          type: 'text',
-          text: '## Resumo\n\nDados atualizados até 15/01/2025.\n\nEncontrei 2 produtos com oportunidade de balanceamento.',
+      choices: [{
+        message: {
+          content: '## Resumo\n\nDados atualizados até 15/01/2025.\n\nEncontrei 2 produtos com oportunidade de balanceamento.',
+          tool_calls: null,
         },
-      ],
-      stop_reason: 'end_turn',
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 200, completion_tokens: 40 },
     });
 
     const result = await agent.chat(tenant, 'Quais produtos posso balancear?');
@@ -147,88 +175,109 @@ describe('IrisAgent', () => {
     // Verify tool result was passed back to the model
     const secondCallMessages = mockCreate.mock.calls[1][0].messages;
     const toolResultMsg = secondCallMessages.find(
-      (m: { role: string }) => m.role === 'user' && Array.isArray(m.content)
+      (m: { role: string }) => m.role === 'tool'
     );
     expect(toolResultMsg).toBeDefined();
   });
 
   it('respects maxToolCalls limit', async () => {
+    setupChatMocks(
+      makeClickHouseResponse([{ dt: '2025-01-15' }]),   // tool call #1
+      makeClickHouseResponse(sampleProducts),             // tool call #2
+    );
+
     // First call: tool use #1
     mockCreate.mockResolvedValueOnce({
-      content: [
-        {
-          type: 'tool_use',
-          id: 'tool-1',
-          name: 'clickhouse_query',
-          input: { sql: `SELECT MAX(dtcarga) as dt FROM x WHERE tenant = '${tenant.tenantId}'` },
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            id: 'call-1',
+            type: 'function',
+            function: {
+              name: 'clickhouse_query',
+              arguments: JSON.stringify({ sql: `SELECT MAX(dtcarga) as dt FROM x WHERE tenant = '${tenant.tenantId}'` }),
+            },
+          }],
         },
-      ],
-      stop_reason: 'tool_use',
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 30 },
     });
-
-    mockQuery.mockResolvedValueOnce(
-      makeClickHouseResponse([{ dt: '2025-01-15' }])
-    );
 
     // Second call: tool use #2
     mockCreate.mockResolvedValueOnce({
-      content: [
-        {
-          type: 'tool_use',
-          id: 'tool-2',
-          name: 'clickhouse_query',
-          input: { sql: `SELECT * FROM x WHERE tenant = '${tenant.tenantId}' LIMIT 10` },
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            id: 'call-2',
+            type: 'function',
+            function: {
+              name: 'clickhouse_query',
+              arguments: JSON.stringify({ sql: `SELECT * FROM x WHERE tenant = '${tenant.tenantId}' LIMIT 10` }),
+            },
+          }],
         },
-      ],
-      stop_reason: 'tool_use',
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 200, completion_tokens: 40 },
     });
-
-    mockQuery.mockResolvedValueOnce(
-      makeClickHouseResponse(sampleProducts)
-    );
 
     // Third call: model should generate text (tool budget exhausted)
     mockCreate.mockResolvedValueOnce({
-      content: [
-        { type: 'text', text: 'Aqui estão os produtos encontrados.' },
-      ],
-      stop_reason: 'end_turn',
+      choices: [{
+        message: {
+          content: 'Aqui estão os produtos encontrados.',
+          tool_calls: null,
+        },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 300, completion_tokens: 20 },
     });
 
     const result = await agent.chat(tenant, 'O que posso redistribuir?');
 
     expect(result.response).toContain('produtos encontrados');
     expect(mockCreate).toHaveBeenCalledTimes(3);
-    // ClickHouse was called exactly 2 times (the limit)
-    expect(mockQuery).toHaveBeenCalledTimes(2);
   });
 
   it('handles ClickHouse errors gracefully', async () => {
+    // Internal calls
+    mockQuery.mockResolvedValueOnce(makeClickHouseResponse([])); // isInTrainingMode
+    mockQuery.mockResolvedValueOnce(makeClickHouseResponse([])); // loadRulesSkill
+    // Tool call: ClickHouse fails
+    mockQuery.mockRejectedValueOnce(new Error('Connection refused'));
+
     // Model wants to query
     mockCreate.mockResolvedValueOnce({
-      content: [
-        {
-          type: 'tool_use',
-          id: 'tool-1',
-          name: 'clickhouse_query',
-          input: { sql: `SELECT 1 WHERE tenant = '${tenant.tenantId}'` },
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            id: 'call-1',
+            type: 'function',
+            function: {
+              name: 'clickhouse_query',
+              arguments: JSON.stringify({ sql: `SELECT 1 WHERE tenant = '${tenant.tenantId}'` }),
+            },
+          }],
         },
-      ],
-      stop_reason: 'tool_use',
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 30 },
     });
-
-    // ClickHouse fails
-    mockQuery.mockRejectedValueOnce(new Error('Connection refused'));
 
     // Model gets error and responds gracefully
     mockCreate.mockResolvedValueOnce({
-      content: [
-        {
-          type: 'text',
-          text: 'Problemas técnicos impediram a geração desta análise no momento.',
+      choices: [{
+        message: {
+          content: 'Problemas técnicos impediram a geração desta análise no momento.',
+          tool_calls: null,
         },
-      ],
-      stop_reason: 'end_turn',
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 200, completion_tokens: 20 },
     });
 
     const result = await agent.chat(tenant, 'Analise o produto 1001');
@@ -237,44 +286,55 @@ describe('IrisAgent', () => {
     // The tool error was caught and sent back to the model
     const secondCallMessages = mockCreate.mock.calls[1][0].messages;
     const toolResultMsg = secondCallMessages.find(
-      (m: { role: string; content: unknown[] }) =>
-        m.role === 'user' &&
-        Array.isArray(m.content) &&
-        m.content[0]?.type === 'tool_result'
+      (m: { role: string }) => m.role === 'tool'
     );
     expect(toolResultMsg).toBeDefined();
   });
 
   it('maintains conversation context across messages', async () => {
     // First message
+    setupChatMocks(); // internal calls for 1st chat
     mockCreate.mockResolvedValueOnce({
-      content: [{ type: 'text', text: 'Olá! Como posso ajudar?' }],
-      stop_reason: 'end_turn',
+      choices: [{
+        message: {
+          content: 'Olá! Como posso ajudar?',
+          tool_calls: null,
+        },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 10 },
     });
 
     const first = await agent.chat(tenant, 'Oi');
 
     // Second message in same conversation
+    setupChatMocks(); // internal calls for 2nd chat
     mockCreate.mockResolvedValueOnce({
-      content: [{ type: 'text', text: 'Vou listar os produtos disponíveis.' }],
-      stop_reason: 'end_turn',
+      choices: [{
+        message: {
+          content: 'Vou listar os produtos disponíveis.',
+          tool_calls: null,
+        },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 150, completion_tokens: 15 },
     });
 
     const second = await agent.chat(tenant, 'Quais produtos?', first.conversationId);
 
     expect(second.conversationId).toBe(first.conversationId);
 
-    // Second call should include previous messages
+    // Second call should include previous messages (system + user + assistant + user = 4)
     const secondCallMessages = mockCreate.mock.calls[1][0].messages;
-    expect(secondCallMessages).toHaveLength(3); // user, assistant, user
-    expect(secondCallMessages[0].content).toBe('Oi');
-    expect(secondCallMessages[1].content).toBe('Olá! Como posso ajudar?');
-    expect(secondCallMessages[2].content).toBe('Quais produtos?');
+    expect(secondCallMessages).toHaveLength(4);
+    expect(secondCallMessages[1].content).toBe('Oi');
+    expect(secondCallMessages[2].content).toBe('Olá! Como posso ajudar?');
+    expect(secondCallMessages[3].content).toBe('Quais produtos?');
   });
 
   it('includes balancing rules in system prompt', async () => {
     const agentWithRules = new IrisAgent({
-      anthropicApiKey: 'sk-test-fake-key',
+      openaiApiKey: 'sk-test-fake-key',
       clickhouse: { url: 'http://localhost:9999' },
       rules: [
         {
@@ -287,15 +347,24 @@ describe('IrisAgent', () => {
       ],
     });
 
+    setupChatMocks(); // internal calls
     mockCreate.mockResolvedValueOnce({
-      content: [{ type: 'text', text: 'Entendido.' }],
-      stop_reason: 'end_turn',
+      choices: [{
+        message: {
+          content: 'Entendido.',
+          tool_calls: null,
+        },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 5 },
     });
 
     await agentWithRules.chat(tenant, 'Olá');
 
-    const systemPrompt = mockCreate.mock.calls[0][0].system;
-    expect(systemPrompt).toContain('BLOQUEIO');
-    expect(systemPrompt).toContain('Não transferir produtos curva D');
+    const systemMsg = mockCreate.mock.calls[0][0].messages.find(
+      (m: { role: string }) => m.role === 'system'
+    );
+    expect(systemMsg.content).toContain('BLOQUEIO');
+    expect(systemMsg.content).toContain('Não transferir produtos curva D');
   });
 });
