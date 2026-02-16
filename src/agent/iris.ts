@@ -575,6 +575,29 @@ export class IrisAgent {
       });
     }
 
+    if (name === 'consultar_conhecimento') {
+      const termo = input.termo as string;
+
+      console.log('[Iris Tool] consultar_conhecimento:', termo);
+
+      const knowledge = await this.loadKnowledgeBase(termo);
+
+      if (knowledge.length === 0) {
+        return JSON.stringify({
+          termo,
+          encontrado: false,
+          message: `Conceito "${termo}" não encontrado na base de conhecimento.`,
+          sugestao: 'Termos disponíveis: excesso, necessidade, cobertura, vencido, ruptura, curva_abc, balanceamento, capital_parado',
+        });
+      }
+
+      return JSON.stringify({
+        termo,
+        encontrado: true,
+        conhecimento: knowledge[0],
+      });
+    }
+
     if (name === 'optimize_batch') {
       const filters = input.filters as Record<string, unknown>;
       const constraints = input.constraints as Record<string, unknown> | undefined;
@@ -716,6 +739,40 @@ export class IrisAgent {
   async destroy(): Promise<void> {
     this.csvStore.destroy();
     await this.clickhouse.close();
+  }
+
+  /**
+   * Load knowledge base for enriching explanations
+   */
+  private async loadKnowledgeBase(termo?: string): Promise<Record<string, unknown>[]> {
+    const whereConditions = ["ativo = true", "tenant = 'global'"];
+
+    if (termo) {
+      whereConditions.push(`lower(termo) = lower('${termo}')`);
+    }
+
+    const query = `
+      SELECT
+        termo,
+        definicao,
+        porque_importa,
+        relacoes,
+        exemplos,
+        categoria,
+        tags
+      FROM ia_base_conhecimento
+      WHERE ${whereConditions.join(' AND ')}
+      ORDER BY termo ASC
+      LIMIT 50
+    `;
+
+    try {
+      const rows = await this.clickhouse.query(query, { tenantId: 'global', userEmail: '' });
+      return rows;
+    } catch (error) {
+      console.warn('[Iris] Failed to load knowledge:', error);
+      return [];
+    }
   }
 
   /**

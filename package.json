@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "setup:tracking": "tsx scripts/setup-usage-tracking.ts",
     "setup:logging": "tsx scripts/setup-agents-log.ts",
-    "setup:rules": "tsx scripts/setup-rules-system.ts"
+    "setup:rules": "tsx scripts/setup-rules-system.ts",
+    "setup:knowledge": "tsx scripts/setup-knowledge-base.ts"
   },
   "keywords": [
     "balanceamento",

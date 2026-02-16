@@ -68,6 +68,27 @@ nomefabricante → Fabricante, curva → Curva, linha → Linha`,
     },
   },
   {
+    name: 'consultar_conhecimento',
+    description: `Busca definições de conceitos de negócio na base de conhecimento.
+
+Use quando:
+- Usuário pergunta "o que é X?"
+- Precisa explicar um conceito (excesso, vencido, cobertura, ruptura, curva ABC)
+- Quer enriquecer resposta com contexto de negócio
+
+Retorna: definição, importância, relações e exemplos práticos`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        termo: {
+          type: 'string',
+          description: 'Termo a buscar (ex: "excesso", "vencido", "cobertura", "ruptura", "curva_abc")',
+        },
+      },
+      required: ['termo'],
+    },
+  },
+  {
     name: 'optimize_batch',
     description: `Executa otimização em lote usando algoritmo Python.
 
