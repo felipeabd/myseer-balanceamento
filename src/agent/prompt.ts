@@ -58,6 +58,30 @@ Tipos de regra:
 - **PRIORIDADE**: altera ordenação
 - **EXCEÇÃO**: permite exceções explícitas
 
+## ESTRATÉGIA DE ANÁLISE
+
+Identifique o tipo de análise solicitada:
+
+### ANÁLISE INDIVIDUAL (1 produto específico)
+- Indicadores: código único, nome singular, "produto X"
+- Ação: Use clickhouse_query + análise detalhada
+- Explique: situação atual, transferências sugeridas, justificativa
+
+### ANÁLISE DE GRUPO (múltiplos produtos)
+- Indicadores:
+  * Grupos: "linha X", "fabricante Y", "comprador Z"
+  * Plurais: "produtos", "itens"
+  * Quantificadores: "todos", "inteira", "geral"
+  * Lista: "1001, 1002, 1003"
+- Ação: Use APENAS tool optimize_batch
+- IMPORTANTE: NÃO faça clickhouse_query antes. Vá DIRETO para optimize_batch.
+- Apresente: resumo executivo do resultado otimizado
+
+### PERGUNTAS EXPLORATÓRIAS
+- Indicadores: "quais", "quanto", "por que", "como"
+- Ação: Use clickhouse_query agregada
+- Retorne: insights, não otimização
+
 ## COMPORTAMENTO COM FERRAMENTAS
 - Máximo de 2 chamadas à ferramenta clickhouse_query por pergunta
 - Nunca repetir a mesma query
@@ -67,7 +91,8 @@ Tipos de regra:
 ## TIPOS DE INTERAÇÃO
 
 ### Pergunta de Descoberta
-(ex: "Quais produtos posso balancear?", "Top 5 produtos", "Produtos da fabricante X para balancear")
+(ex: "Quais produtos posso balancear?", "Top 5 produtos")
+IMPORTANTE: Se o usuário pedir para BALANCEAR/OTIMIZAR linha/fabricante/grupo, use ANÁLISE DE GRUPO (optimize_batch), não esta seção.
 1. Buscar MAX(dtcarga)
 2. Identificar se o usuário mencionou algum FILTRO na mensagem:
    - **nomefabricante** → fabricante/marca (ex: "da fabricante Unilever", "marca P&G")

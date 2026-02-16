@@ -12,7 +12,7 @@ export class ClickHouseService {
       database: this.database,
       username: config.username ?? 'default',
       password: config.password ?? '',
-      request_timeout: 30_000,
+      request_timeout: 120_000, // 2 minutes for large queries
     });
   }
 
@@ -41,8 +41,12 @@ export class ClickHouseService {
       throw new Error('Query must include tenant filter');
     }
 
+    console.log('[ClickHouse] Executing query...');
+    const startTime = Date.now();
     const result = await this.client.query({ query: sql, format: 'JSONEachRow' });
     const rows = await result.json<Record<string, unknown>>();
+    const duration = Date.now() - startTime;
+    console.log(`[ClickHouse] Query completed in ${duration}ms, returned ${rows.length} rows`);
     return rows as Record<string, unknown>[];
   }
 

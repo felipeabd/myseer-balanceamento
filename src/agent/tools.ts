@@ -67,4 +67,64 @@ nomefabricante → Fabricante, curva → Curva, linha → Linha`,
       required: ['columns', 'data'],
     },
   },
+  {
+    name: 'optimize_batch',
+    description: `Executa otimização em lote usando algoritmo Python.
+
+Use quando:
+- Análise envolve 2 ou mais produtos
+- Grupo (linha, fabricante, comprador, curva)
+- Lista explícita de produtos
+
+O sistema irá:
+1. Buscar dados do ClickHouse
+2. Executar otimização matemática (equalização de cobertura)
+3. Retornar plano de transferências otimizado
+
+Retorno: JSON com transferências sugeridas + métricas agregadas`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        filters: {
+          type: 'object',
+          description: 'Filtros para seleção de produtos',
+          properties: {
+            linha: { type: 'string' },
+            fabricante: { type: 'string' },
+            comprador: { type: 'string' },
+            curva: { type: 'string' },
+            produtos: {
+              type: 'array',
+              items: { type: 'number' },
+              description: 'Lista de cdprod',
+            },
+          },
+        },
+        constraints: {
+          type: 'object',
+          description: 'Restrições opcionais (futuro)',
+          properties: {
+            max_transfers_per_store: { type: 'number' },
+            prioritize_curve: { type: 'string' },
+          },
+        },
+        columns: {
+          type: 'array',
+          items: { type: 'string' },
+          description: `Colunas para incluir no CSV (opcional). Se não especificado, usa todas as colunas disponíveis.
+
+Colunas disponíveis:
+- cdprod, descricao, curva, linha
+- filial_origem, filial_destino
+- qtexcesso_origem, qtnecessidade_destino, qt_transferida
+- vlrcusto, valor_gerado
+- cobertura_inicial_origem, cobertura_final_origem
+- cobertura_inicial_destino, cobertura_final_destino
+
+Exemplo: ["cdprod", "filial_origem", "filial_destino", "qt_transferida", "valor_gerado"]`,
+        },
+      },
+      required: ['filters'],
+    },
+  },
 ];

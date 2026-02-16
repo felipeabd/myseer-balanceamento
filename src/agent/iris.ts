@@ -34,7 +34,7 @@ export class IrisAgent {
   private baseUrl: string;
 
   // TEMPORARY: Fixed tenant for development until multi-tenant filtering is properly implemented
-  private readonly FIXED_TENANT_ID = '33F6E320-F59E-4E43-99C2-2D6748A64B04';
+  private readonly FIXED_TENANT_ID = '7489598B-A6AC-4AB3-B1BB-5221DBC8EAB5';
   private readonly AGENT_NAME = 'iris_balanceamento';
 
   /** Get tenant context with fixed tenant ID */
@@ -533,6 +533,20 @@ export class IrisAgent {
 
       const rows = await this.clickhouse.query(sql, fixedTenant);
       console.log('[Iris Tool] Result rows:', Array.isArray(rows) ? rows.length : 0);
+
+      // Auto-truncate large results to prevent context overflow
+      if (rows.length > 100) {
+        console.log(`[Iris Tool] WARNING: Query returned ${rows.length} rows, truncating to 100 + summary`);
+        const truncated = rows.slice(0, 100);
+        const summary = {
+          _truncated: true,
+          _total_rows: rows.length,
+          _showing: 100,
+          _message: `Resultado truncado. Mostrando apenas 100 de ${rows.length} linhas. Para análise de grupos grandes, use optimize_batch em vez de clickhouse_query.`
+        };
+        return JSON.stringify([summary, ...truncated]);
+      }
+
       return JSON.stringify(rows);
     }
 
@@ -547,7 +561,10 @@ export class IrisAgent {
 
       const csvContent = generateCsv(columns, data);
       const csvId = this.csvStore.save(csvContent, `${filename}.csv`);
-      const downloadUrl = `/api/iris/download/csv/${csvId}`;
+
+      // Generate absolute URL for download (backend server)
+      const backendPort = process.env.PORT || '3030';
+      const downloadUrl = `http://localhost:${backendPort}/api/iris/download/csv/${csvId}`;
 
       return JSON.stringify({
         success: true,
@@ -556,6 +573,102 @@ export class IrisAgent {
         rows: data.length,
         columns: columns.length,
       });
+    }
+
+    if (name === 'optimize_batch') {
+      const filters = input.filters as Record<string, unknown>;
+      const constraints = input.constraints as Record<string, unknown> | undefined;
+      const customColumns = input.columns as string[] | undefined;
+
+      console.log('[Iris Tool] optimize_batch filters:', filters);
+      if (customColumns) {
+        console.log('[Iris Tool] Custom columns requested:', customColumns);
+      }
+
+      // TEMPORARY: Override tenant with fixed tenant ID for development
+      const fixedTenant = this.getFixedTenant(tenant);
+
+      // Fetch data from ClickHouse based on filters
+      const products = await this.fetchProductsForOptimization(filters, fixedTenant);
+
+      if (products.length === 0) {
+        return JSON.stringify({
+          error: 'Nenhum produto encontrado com os filtros especificados',
+          filters,
+        });
+      }
+
+      console.log('[Iris Tool] optimize_batch products found:', products.length);
+
+      // Load active rules for this tenant
+      const rules = await this.loadActiveRules(fixedTenant.tenantId);
+      console.log('[Iris Tool] Active rules loaded:', rules.length);
+
+      // Call Python optimizer with rules
+      const result = await this.runPythonOptimizer(products, constraints, rules);
+
+      console.log('[Iris Tool] Python result type:', typeof result);
+      console.log('[Iris Tool] Has transfers?', 'transfers' in result);
+      console.log('[Iris Tool] Transfers length:', (result as any).transfers?.length || 0);
+
+      // Auto-generate CSV for large results (> 1000 transfers)
+      if (result.transfers && Array.isArray(result.transfers) && result.transfers.length > 1000) {
+        console.log(`[Iris Tool] Auto-generating CSV for ${result.transfers.length} transfers`);
+
+        try {
+
+        // Define columns - use custom if provided, otherwise all available
+        const allColumns = [
+          'cdprod', 'descricao', 'curva', 'linha',
+          'filial_origem', 'filial_destino',
+          'qtexcesso_origem', 'qtnecessidade_destino', 'qt_transferida',
+          'vlrcusto', 'valor_gerado',
+          'cobertura_inicial_origem', 'cobertura_final_origem',
+          'cobertura_inicial_destino', 'cobertura_final_destino',
+        ];
+        const columns = customColumns || allColumns;
+        console.log('[Iris Tool] Using columns:', columns);
+
+          const csvContent = generateCsv(columns, result.transfers);
+          console.log('[Iris Tool] CSV generated, size:', csvContent.length, 'bytes');
+
+          const csvId = this.csvStore.save(csvContent, `balanceamento_${filters.linha || filters.fabricante || 'grupo'}.csv`);
+          console.log('[Iris Tool] CSV saved with ID:', csvId);
+
+          // Generate absolute URL for download (backend server)
+          const backendPort = process.env.PORT || '3030';
+          const downloadUrl = `http://localhost:${backendPort}/api/iris/download/csv/${csvId}`;
+          console.log('[Iris Tool] Download URL:', downloadUrl);
+
+          return JSON.stringify({
+            auto_csv: true,
+            csv_url: downloadUrl,
+            summary: result.summary,
+            message: `✅ Resultado completo gerado! ${result.transfers.length} transferências disponíveis para download.`,
+            transfers_sample: result.transfers.slice(0, 20), // Mostra apenas 20 primeiras
+          });
+        } catch (error) {
+          console.error('[Iris Tool] Error generating CSV:', error);
+          return JSON.stringify({
+            error: 'Erro ao gerar CSV: ' + (error instanceof Error ? error.message : String(error)),
+            summary: result.summary,
+          });
+        }
+      }
+
+      // For moderate results (50-1000), truncate to prevent overflow
+      if (result.transfers && Array.isArray(result.transfers) && result.transfers.length > 50) {
+        console.log(`[Iris Tool] Truncating ${result.transfers.length} transfers to 50 + summary`);
+        return JSON.stringify({
+          _truncated: true,
+          _total_transfers: result.transfers.length,
+          _message: `⚠️ Resultado truncado. Mostrando 50 de ${result.transfers.length} transferências. Peça para gerar CSV completo.`,
+          summary: result.summary,
+          transfers_sample: result.transfers.slice(0, 50),
+        });
+      }
+
+      return JSON.stringify(result);
     }
 
     return JSON.stringify({ error: `Unknown tool: ${name}` });
@@ -603,5 +716,156 @@ export class IrisAgent {
   async destroy(): Promise<void> {
     this.csvStore.destroy();
     await this.clickhouse.close();
+  }
+
+  /**
+   * Load active rules from database for Python optimizer
+   */
+  private async loadActiveRules(tenantId: string): Promise<Record<string, unknown>[]> {
+    const query = `
+      SELECT
+        id,
+        tipo,
+        prioridade,
+        alvo,
+        condicao,
+        acao,
+        texto
+      FROM ia_regras_balanceamento
+      WHERE status = 'ativo'
+        AND (tenant = '${tenantId}' OR tenant = 'null')
+      ORDER BY prioridade ASC, criado_em ASC
+      LIMIT 100
+    `;
+
+    try {
+      const rows = await this.clickhouse.query(query, { tenantId, userEmail: '' });
+      return rows;
+    } catch (error) {
+      console.warn('[Iris] Failed to load rules:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch products for batch optimization based on filters.
+   */
+  private async fetchProductsForOptimization(
+    filters: Record<string, unknown>,
+    tenant: TenantContext
+  ): Promise<Record<string, unknown>[]> {
+    const whereConditions = [`tenant = '${tenant.tenantId}'`];
+    whereConditions.push('filialdeposito <> 1');
+
+    // Build filters dynamically (case-insensitive)
+    if (filters.linha) whereConditions.push(`upper(linha) = upper('${filters.linha}')`);
+    if (filters.fabricante) whereConditions.push(`upper(nomefabricante) = upper('${filters.fabricante}')`);
+    if (filters.curva) whereConditions.push(`upper(curva) = upper('${filters.curva}')`);
+    if (filters.produtos && Array.isArray(filters.produtos)) {
+      whereConditions.push(`cdprod IN (${(filters.produtos as number[]).join(',')})`);
+    }
+
+    // Get latest date first
+    const dateQuery = `
+      SELECT MAX(dtcarga) AS max_date
+      FROM default.ia_fato_balanceamento
+      WHERE ${whereConditions.join(' AND ')}
+    `;
+    const dateResult = await this.clickhouse.query(dateQuery, tenant);
+    const maxDate = dateResult[0]?.max_date;
+
+    if (!maxDate) {
+      return [];
+    }
+
+    whereConditions.push(`dtcarga = '${maxDate}'`);
+
+    const sql = `
+      SELECT
+        cdprod, cdFilial, descricao, curva, nomefabricante,
+        qtexcesso, qtnecessidade, qtestoque, cobertura,
+        mediaf_un, vlrcusto, linha
+      FROM default.ia_fato_balanceamento
+      WHERE ${whereConditions.join(' AND ')}
+        AND (qtexcesso > 0 OR qtnecessidade > 0)
+      ORDER BY cdprod, cdFilial
+    `;
+
+    return await this.clickhouse.query(sql, tenant);
+  }
+
+  /**
+   * Run Python optimizer subprocess and return results.
+   * Uses temporary file for large datasets to avoid command-line argument size limits.
+   */
+  private async runPythonOptimizer(
+    products: Record<string, unknown>[],
+    constraints?: Record<string, unknown>,
+    rules?: Record<string, unknown>[]
+  ): Promise<Record<string, unknown>> {
+    const { spawn } = await import('child_process');
+    const { writeFileSync, unlinkSync } = await import('fs');
+    const { join } = await import('path');
+    const { tmpdir } = await import('os');
+
+    // Create temporary input file
+    const tempInputFile = join(tmpdir(), `iris-optimizer-${Date.now()}.json`);
+
+    try {
+      // Package all data together
+      const inputData = {
+        products,
+        rules: rules || [],
+        constraints: constraints || {},
+      };
+
+      writeFileSync(tempInputFile, JSON.stringify(inputData));
+      console.log(`[Iris Tool] Writing ${products.length} products + ${rules?.length || 0} rules to temp file: ${tempInputFile}`);
+
+      return await new Promise((resolve, reject) => {
+        const python = spawn('python', [
+          'optimizer/optimize.py',
+          tempInputFile,
+        ]);
+
+        let output = '';
+        let errorOutput = '';
+
+        python.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+
+        python.stderr.on('data', (data) => {
+          errorOutput += data.toString();
+        });
+
+        python.on('close', (code) => {
+          // Clean up temp file
+          try {
+            unlinkSync(tempInputFile);
+          } catch (e) {
+            console.warn('[Iris Tool] Failed to delete temp file:', tempInputFile);
+          }
+
+          if (code !== 0) {
+            reject(new Error(`Python optimizer failed: ${errorOutput}`));
+          } else {
+            try {
+              resolve(JSON.parse(output));
+            } catch (e) {
+              reject(new Error(`Failed to parse optimizer output: ${output}`));
+            }
+          }
+        });
+      });
+    } catch (error) {
+      // Clean up on error
+      try {
+        unlinkSync(tempInputFile);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
   }
 }
