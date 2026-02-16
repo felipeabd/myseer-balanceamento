@@ -165,6 +165,7 @@ export class IrisAgent {
       const response = await this.anthropic.messages.create({
         model: this.model,
         max_tokens: 4096,
+        temperature: 0.5,
         system: systemPrompt,
         tools: agentTools,
         messages: currentMessages,
@@ -379,6 +380,7 @@ export class IrisAgent {
         const response = await this.anthropic.messages.create({
           model: this.model,
           max_tokens: 4096,
+          temperature: 0.5,
           system: systemPrompt,
           tools: agentTools,
           messages: currentMessages,
@@ -595,6 +597,44 @@ export class IrisAgent {
         termo,
         encontrado: true,
         conhecimento: knowledge[0],
+      });
+    }
+
+    if (name === 'adicionar_conhecimento') {
+      const termo = input.termo as string;
+      const definicao = input.definicao as string;
+      const porque_importa = input.porque_importa as string;
+      const categoria = input.categoria as string;
+      const relacoes = (input.relacoes as string) || '';
+      const exemplos = (input.exemplos as string) || '';
+      const tags = (input.tags as string) || '';
+
+      console.log('[Iris Tool] adicionar_conhecimento:', termo);
+
+      // Insert knowledge into database
+      const insertQuery = `
+        INSERT INTO default.ia_base_conhecimento (
+          termo, definicao, porque_importa, relacoes, exemplos, categoria, tags, tenant, ativo
+        ) VALUES (
+          '${termo.replace(/'/g, "\\'")}',
+          '${definicao.replace(/'/g, "\\'")}',
+          '${porque_importa.replace(/'/g, "\\'")}',
+          '${relacoes.replace(/'/g, "\\'")}',
+          '${exemplos.replace(/'/g, "\\'")}',
+          '${categoria.replace(/'/g, "\\'")}',
+          '${tags.replace(/'/g, "\\'")}',
+          'global',
+          true
+        )
+      `;
+
+      await this.clickhouse.execute(insertQuery);
+
+      return JSON.stringify({
+        sucesso: true,
+        termo,
+        message: `Conhecimento "${termo}" adicionado com sucesso à base de conhecimento!`,
+        categoria,
       });
     }
 

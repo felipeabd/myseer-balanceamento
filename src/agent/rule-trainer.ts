@@ -347,6 +347,7 @@ Quando o usuário pedir para CORRIGIR, REFAZER ou ALTERAR uma regra:
       const response = await this.anthropic.messages.create({
         model: this.model,
         max_tokens: 4096,
+        temperature: 0.5,
         system: this.getSystemPrompt(),
         messages,
         tools,

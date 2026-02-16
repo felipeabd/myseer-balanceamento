@@ -148,4 +148,57 @@ Exemplo: ["cdprod", "filial_origem", "filial_destino", "qt_transferida", "valor_
       required: ['filters'],
     },
   },
+  {
+    name: 'adicionar_conhecimento',
+    description: `Adiciona um novo conhecimento à base de conhecimento do sistema.
+
+Use quando:
+- Usuário usar o comando "conhecimento: [conteúdo]"
+- Quiser ensinar um novo conceito ao sistema
+- Adicionar definição de termo de negócio
+
+IMPORTANTE: Extraia as informações do texto fornecido pelo usuário:
+- termo: Nome do conceito (ex: "vencido próximo", "ruptura crônica")
+- definicao: O que é (1-2 frases)
+- porque_importa: Por que é relevante para o negócio
+- relacoes: Como se relaciona com outros conceitos
+- exemplos: Casos práticos de uso
+- categoria: inventario | balanceamento | ruptura | giro | compra
+- tags: Palavras-chave separadas por vírgula`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        termo: {
+          type: 'string',
+          description: 'Nome do conceito/termo',
+        },
+        definicao: {
+          type: 'string',
+          description: 'Definição do conceito (1-2 frases)',
+        },
+        porque_importa: {
+          type: 'string',
+          description: 'Por que é importante para o negócio',
+        },
+        relacoes: {
+          type: 'string',
+          description: 'Relações com outros conceitos (opcional)',
+        },
+        exemplos: {
+          type: 'string',
+          description: 'Exemplos práticos (opcional)',
+        },
+        categoria: {
+          type: 'string',
+          description: 'Categoria do conhecimento',
+          enum: ['inventario', 'balanceamento', 'ruptura', 'giro', 'compra', 'outro'],
+        },
+        tags: {
+          type: 'string',
+          description: 'Tags separadas por vírgula (opcional)',
+        },
+      },
+      required: ['termo', 'definicao', 'porque_importa', 'categoria'],
+    },
+  },
 ];
