@@ -126,42 +126,75 @@ Ao transferir X unidades:
 Sempre filtrar: tenant = '${tenant.tenantId}'
 Sempre começar com: SELECT MAX(dtcarga) FROM <tabela> WHERE tenant = '...'
 
+⚠️ ALERTA DE DADOS DESATUALIZADOS: Se MAX(dtcarga) for mais antiga que ontem, alertar o usuário ANTES de continuar a análise.
+
 ### Tabela: default.ia_agente_fato_estoque
 Uso: diagnóstico amplo de estoque — excessos, rupturas, capital imobilizado, produtos parados
-Campos de identificação:
-  tenant, dtcarga, cdFilial, nome_filial, supervisor, cdprod, descricao,
-  nomefabricante, curva, linha, comprador, departamento, categoria, principioativo,
-  tipocompra, marcapropria
+
+Campos de identificação e contexto:
+  tenant           — identificador do cliente
+  dtcarga          — data da carga dos dados (deve ser de ontem; se mais antiga, alertar)
+  cdFilial         — código da filial
+  nome_filial      — nome da filial
+  supervisor       — supervisor responsável pela filial
+  cdprod           — código do produto
+  descricao        — nome do produto
+  nomefabricante   — nome do fabricante
+  curva            — curva ABC do produto (A, B ou C)
+  linha            — linha do produto (ex: "Dermatologia", "Genéricos")
+  comprador        — comprador responsável pelo produto
+  departamento     — departamento do produto
+  categoria        — categoria do produto
+  principioativo   — princípio ativo (ex: dipirona, azitromicina, ibuprofeno) — útil para agrupar similares
+  tipocompra       — tipo de compra (ex: direto, distribuidor)
+  marcapropria     — indica se é produto de marca própria
 
 Campos de estoque e valor:
-  qtestoque, vlr_custo, mediaf_un, qtexcesso, qtnecessidade,
-  qt_seguranca, qt_maxima,
-  estoque_valor, excesso_valor, mediaf_valor, faltavlr,
-  qt_pendencia_entrada, qt_pendencia_saida, qt_faceamento, qt_financiado
+  qtestoque        — quantidade em estoque
+  vlr_custo        — custo unitário do produto (usar SOMENTE este nome, NÃO usar "vlrcusto")
+  mediaf_un        — demanda média mensal do produto na filial (unidades/mês)
+  qtexcesso        — excesso calculado (quantidade acima do ideal — coluna primária para análise de excesso)
+  qtnecessidade    — margem de reposição (quantidade abaixo do ideal — NÃO é sinônimo de ruptura)
+  qt_seguranca     — estoque de segurança do produto na filial (ponto de reposição de segurança)
+  qt_maxima        — estoque máximo de referência (apenas contexto, NÃO é indicador primário)
+  estoque_valor    — valor total do estoque (qtestoque × vlr_custo)
+  excesso_valor    — valor do excesso (qtexcesso × vlr_custo)
+  mediaf_valor     — valor da demanda média (mediaf_un × vlr_custo)
+  faltavlr         — quando estoque = 0: preenchido com percent_vlr (participação deste produto na falta da rede, em %)
+  percent_vlr      — representatividade do produto em valor de venda (usado no cálculo de ruptura e falta)
+  qt_pendencia_entrada — quantidade pendente de entrada (pedidos em aberto)
+  qt_pendencia_saida   — quantidade pendente de saída (transferências em andamento)
+  qt_faceamento    — quantidade utilizada em faceamento (exposição de prateleira)
+  qt_financiado    — quantidade do produto em financiamento
 
 Regras de diagnóstico:
   - EXCESSO → usar coluna qtexcesso > 0 (já calculado). qt_maxima é só referência de contexto
-  - RISCO DE RUPTURA → qtestoque < qt_seguranca (abaixo do ponto de segurança). qt_seguranca é referência
+  - RISCO DE RUPTURA → qtestoque < qt_seguranca (abaixo do ponto de segurança)
   - MARGEM DE REPOSIÇÃO → qtnecessidade > 0, mas qtestoque >= qt_seguranca (sem risco imediato)
   - qtnecessidade indica apenas que há margem para reposição — NÃO é sinônimo de ruptura
+  - EM FALTA (sem estoque) → qtestoque = 0; ver faltavlr para impacto na rede
 
 Campos de tempo:
-  dias_parado, dias_falta, dias_sem_estoque, dias_sem_venda, dias_sem_entrada
+  dias_parado        — dias desde a última venda
+  dias_falta         — dias em situação de falta
+  dias_sem_estoque   — dias com estoque zerado
+  dias_sem_venda     — dias sem registrar venda
+  dias_sem_entrada   — dias sem receber entrada
 
 ⚠️ COLUNAS AUSENTES nesta tabela (não usar):
   - NÃO existe coluna "cobertura" → calcular quando necessário: (qtestoque / mediaf_un) * 30 (somente se mediaf_un > 0)
   - NÃO existe coluna "vlrcusto" → usar vlr_custo (com underscore)
 
-Flags de controle (aplicar conforme o tipo de análise):
-  filialdeposito     — 1 = filial é depósito (excluir em análises de loja)
-  flagnaopartindic   — 1 = filial não participa de indicadores (excluir nesses casos)
-  flaganaliseexcobprod    — 1 = produto participa da análise de excesso (usar em análise de excesso)
-  flaganalisefaltasprod   — 1 = produto participa da análise de falta (usar em análise de falta)
-  flagnaopartindicadoreslinha — 1 = não participa de indicadores de linha
+Flags de controle — ATENÇÃO: lógica invertida (0 = PARTICIPA, 1 = NÃO PARTICIPA):
+  filialdeposito          — 1 = filial é depósito/CD; 0 = filial de loja normal
+  flagnaopartindic        — 0 = filial participa dos indicadores; 1 = NÃO participa
+  flaganaliseexcobprod    — 0 = produto entra na análise de excesso/cobertura; 1 = NÃO entra
+  flaganalisefaltasprod   — 0 = produto entra na análise de falta; 1 = NÃO entra
+  flagnaopartindicadoreslinha — 0 = produto entra nos indicadores de linha; 1 = NÃO entra
 
 Regras dos flags:
-  - Analisando EXCESSO → adicionar: AND flaganaliseexcobprod = 1 AND filialdeposito = 0
-  - Analisando FALTA/RUPTURA → adicionar: AND flaganalisefaltasprod = 1 AND filialdeposito = 0
+  - Analisando EXCESSO → adicionar: AND flaganaliseexcobprod = 0 AND filialdeposito = 0
+  - Analisando FALTA/RUPTURA → adicionar: AND flaganalisefaltasprod = 0 AND filialdeposito = 0
   - Análise geral (capital imobilizado, parado) → adicionar: AND filialdeposito = 0
   - Análise de indicadores de filial → adicionar: AND flagnaopartindic = 0
 

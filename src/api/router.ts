@@ -10,12 +10,6 @@ import { ChatRequest } from '../types';
 export function createIrisRouter(agent: IrisAgent): Router {
   const router = Router();
 
-  // DEBUG: log all incoming headers
-  router.use((req, _res, next) => {
-    console.log(`[DEBUG] ${req.method} ${req.path} | x-tenant-id: ${req.headers['x-tenant-id']} | x-user-email: ${req.headers['x-user-email']}`);
-    next();
-  });
-
   // CSV download endpoint (before tenant middleware — UUID acts as auth token)
   router.get('/download/csv/:id', (req: Request, res: Response) => {
     const csvStore = agent.getCsvStore();

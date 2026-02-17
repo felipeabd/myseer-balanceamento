@@ -32,11 +32,11 @@ Fields: tenant, dtcarga, cdFilial, nome_filial, supervisor, filialdeposito,
   qt_pendencia_entrada, qt_pendencia_saida,
   dias_parado, dias_falta, dias_sem_estoque, dias_sem_venda, dias_sem_entrada,
   qt_faceamento, qt_financiado, percent_vlr
-Flag filters (apply based on analysis type):
-  - Excess analysis: AND flaganaliseexcobprod = 1
-  - Shortage analysis: AND flaganalisefaltasprod = 1
-  - Exclude non-indicator branches: AND flagnaopartindic = 0
-  - Exclude deposit branches: AND filialdeposito = 0
+Flag logic (INVERTED — 0 = PARTICIPATES, 1 = DOES NOT participate):
+  - Excess analysis: AND flaganaliseexcobprod = 0 AND filialdeposito = 0
+  - Shortage analysis: AND flaganalisefaltasprod = 0 AND filialdeposito = 0
+  - General analysis: AND filialdeposito = 0
+  - Branch indicator analysis: AND flagnaopartindic = 0
 
 Return format: array of JSON objects (one per row).
 Maximum 500 rows returned.`,

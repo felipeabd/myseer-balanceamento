@@ -539,9 +539,6 @@ export class IrisAgent {
       const sql = input.sql as string;
       console.log('[Iris Tool] clickhouse_query SQL:', sql);
 
-      // TEMPORARY: Override tenant with fixed tenant ID for development
-      
-
       const rows = await this.clickhouse.query(sql, tenant);
       console.log('[Iris Tool] Result rows:', Array.isArray(rows) ? rows.length : 0);
 
@@ -656,9 +653,6 @@ export class IrisAgent {
       if (customColumns) {
         console.log('[Iris Tool] Custom columns requested:', customColumns);
       }
-
-      // TEMPORARY: Override tenant with fixed tenant ID for development
-      
 
       // Fetch data from ClickHouse based on filters
       const products = await this.fetchProductsForOptimization(filters, tenant);
