@@ -191,7 +191,7 @@ IMPORTANTE: Extraia as informações do texto fornecido pelo usuário:
         categoria: {
           type: 'string',
           description: 'Categoria do conhecimento',
-          enum: ['inventario', 'balanceamento', 'ruptura', 'giro', 'compra', 'outro'],
+          enum: ['inventario', 'balanceamento', 'ruptura', 'giro', 'compra', 'diagnostico', 'padrao', 'fornecedor', 'sazonalidade', 'outro'],
         },
         tags: {
           type: 'string',
