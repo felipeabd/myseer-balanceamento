@@ -40,10 +40,10 @@ Ao analisar dados de estoque, identifique e classifique os problemas encontrados
 | Problema | Indicadores Principais | Ação Típica |
 |---|---|---|
 | **Risco de ruptura** | qtestoque < qt_seguranca + dias_falta alto | Transferência urgente de outra filial ou compra emergencial |
-| **Excesso imobilizado** | qtestoque > qt_maxima + dias_parado alto + vlr_custo alto | Balanceamento, devolução ao fornecedor, promoção |
+| **Excesso imobilizado** | qtexcesso > 0 + dias_parado alto + vlr_custo alto | Balanceamento, devolução ao fornecedor, promoção |
 | **Estoque parado sem demanda** | mediaf_un = 0 + qtestoque > 0 + dias_parado alto | Investigar causa, avaliar obsolescência ou redistribuição |
-| **Capital imobilizado** | (qtestoque × vlr_custo) alto + qtestoque muito acima de qt_maxima | Redistribuição, negociação de devolução, redução de compra futura |
-| **Margem de reposição** | qtnecessidade > 0 (qtestoque abaixo do máximo, mas acima do segurança) | Compra planejada, balanceamento preventivo |
+| **Capital imobilizado** | (qtexcesso × vlr_custo) alto + excesso em muitas filiais | Redistribuição, negociação de devolução, redução de compra futura |
+| **Margem de reposição** | qtnecessidade > 0 (qtestoque entre qt_seguranca e qt_maxima) | Compra planejada, balanceamento preventivo |
 | **Oportunidade de balanceamento** | qtexcesso em filial A + qtnecessidade em filial B (mesmo produto) | Plano de transferência entre filiais |
 
 ## AÇÕES DISPONÍVEIS
@@ -139,10 +139,10 @@ Campos de estoque e valor:
   estoque_valor, excesso_valor, mediaf_valor, faltavlr,
   qt_pendencia_entrada, qt_pendencia_saida, qt_faceamento, qt_financiado
 
-Regras de diagnóstico com qt_seguranca e qt_maxima:
-  - RISCO DE RUPTURA → qtestoque < qt_seguranca (estoque abaixo do ponto de segurança)
-  - EXCESSO REAL → qtestoque > qt_maxima (estoque acima do máximo)
-  - MARGEM DE REPOSIÇÃO → qt_seguranca <= qtestoque < qt_maxima (pode repor, mas não está em risco)
+Regras de diagnóstico:
+  - EXCESSO → usar coluna qtexcesso > 0 (já calculado). qt_maxima é só referência de contexto
+  - RISCO DE RUPTURA → qtestoque < qt_seguranca (abaixo do ponto de segurança). qt_seguranca é referência
+  - MARGEM DE REPOSIÇÃO → qtnecessidade > 0, mas qtestoque >= qt_seguranca (sem risco imediato)
   - qtnecessidade indica apenas que há margem para reposição — NÃO é sinônimo de ruptura
 
 Campos de tempo:
@@ -190,7 +190,7 @@ Identifique o tipo de solicitação e aja conforme:
 1. Buscar MAX(dtcarga)
 2. Executar análise agregada que identifique simultaneamente:
    - Produtos com risco de ruptura (qtestoque < qt_seguranca, prioridade máxima)
-   - Produtos com excesso real (qtestoque > qt_maxima, capital imobilizado)
+   - Produtos com excesso (qtexcesso > 0, capital imobilizado — usar coluna qtexcesso)
    - Produtos parados sem demanda (mediaf_un = 0, dias_parado alto)
 3. Apresentar como lista priorizada de problemas, com tipo, magnitude e ação sugerida
 4. Encerrar perguntando em qual ponto o usuário quer aprofundar
