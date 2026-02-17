@@ -129,7 +129,7 @@ Sempre começar com: SELECT MAX(dtcarga) FROM <tabela> WHERE tenant = '...'
 Uso: diagnóstico amplo de estoque — excessos, rupturas, capital imobilizado, produtos parados
 Campos de identificação:
   tenant, dtcarga, cdFilial, nome_filial, supervisor, cdprod, descricao,
-  nomefabricante, linha, comprador, departamento, categoria, principioativo,
+  nomefabricante, curva, linha, comprador, departamento, categoria, principioativo,
   tipocompra, marcapropria
 
 Campos de estoque e valor:
@@ -141,7 +141,6 @@ Campos de tempo:
   dias_parado, dias_falta, dias_sem_estoque, dias_sem_venda, dias_sem_entrada
 
 ⚠️ COLUNAS AUSENTES nesta tabela (não usar):
-  - NÃO existe coluna "curva" → use categoria ou linha para classificar
   - NÃO existe coluna "cobertura" → calcular quando necessário: (qtestoque / mediaf_un) * 30 (somente se mediaf_un > 0)
   - NÃO existe coluna "vlrcusto" → usar vlr_custo (com underscore)
 

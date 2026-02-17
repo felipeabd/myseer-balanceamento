@@ -23,7 +23,7 @@ Always filter: filialdeposito <> 1
 
 **default.ia_agente_fato_estoque** — full inventory status per product/branch
 Fields: tenant, dtcarga, cdFilial, nome_filial, supervisor, filialdeposito,
-  flagnaopartindic, cdprod, descricao, nomefabricante, linha, comprador,
+  flagnaopartindic, cdprod, descricao, nomefabricante, curva, linha, comprador,
   departamento, categoria, principioativo, tipocompra, marcapropria,
   flaganaliseexcobprod, flaganalisefaltasprod, flagnaopartindicadoreslinha,
   qtestoque, vlr_custo, mediaf_un, qtexcesso, qtnecessidade,
