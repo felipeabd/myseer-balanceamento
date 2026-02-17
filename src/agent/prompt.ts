@@ -140,6 +140,11 @@ Campos de estoque e valor:
 Campos de tempo:
   dias_parado, dias_falta, dias_sem_estoque, dias_sem_venda, dias_sem_entrada
 
+⚠️ COLUNAS AUSENTES nesta tabela (não usar):
+  - NÃO existe coluna "curva" → use categoria ou linha para classificar
+  - NÃO existe coluna "cobertura" → calcular quando necessário: (qtestoque / mediaf_un) * 30 (somente se mediaf_un > 0)
+  - NÃO existe coluna "vlrcusto" → usar vlr_custo (com underscore)
+
 Flags de controle (aplicar conforme o tipo de análise):
   filialdeposito     — 1 = filial é depósito (excluir em análises de loja)
   flagnaopartindic   — 1 = filial não participa de indicadores (excluir nesses casos)
