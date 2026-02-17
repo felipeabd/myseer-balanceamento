@@ -42,10 +42,29 @@ export interface BalancingRule {
   active: boolean;
 }
 
+/** Content block types for multimodal messages */
+export type MessageContent = string | ContentBlock[];
+
+export interface TextContent {
+  type: 'text';
+  text: string;
+}
+
+export interface ImageContent {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+    data: string;
+  };
+}
+
+export type ContentBlock = TextContent | ImageContent;
+
 /** Chat message in a conversation */
 export interface ChatMessage {
   role: 'user' | 'assistant';
-  content: string;
+  content: MessageContent;
   timestamp: Date;
 }
 
@@ -62,6 +81,7 @@ export interface Conversation {
 /** Request body for the chat endpoint */
 export interface ChatRequest {
   message: string;
+  images?: ImageContent[];
   conversationId?: string;
 }
 

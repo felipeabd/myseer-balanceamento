@@ -16,6 +16,9 @@ import {
   BalancingRule,
   ChatMessage,
   StreamCallback,
+  ImageContent,
+  MessageContent,
+  ContentBlock,
 } from '../types';
 
 export class IrisAgent {
@@ -43,6 +46,19 @@ export class IrisAgent {
       ...tenant,
       tenantId: this.FIXED_TENANT_ID,
     };
+  }
+
+  /** Build message content (text only or multimodal with images) */
+  private buildMessageContent(text: string, images?: ImageContent[]): MessageContent {
+    if (!images || images.length === 0) {
+      return text;
+    }
+
+    const contentBlocks: ContentBlock[] = [
+      { type: 'text', text },
+      ...images
+    ];
+    return contentBlocks;
   }
 
   constructor(config: IrisConfig) {
@@ -79,11 +95,13 @@ export class IrisAgent {
   /**
    * Process a user message and return the agent's response.
    * Handles the full agentic loop: LLM → tool call → LLM → response.
+   * Supports multimodal input (text + images).
    */
   async chat(
     tenant: TenantContext,
     userMessage: string,
-    conversationId?: string
+    conversationId?: string,
+    images?: ImageContent[]
   ): Promise<{ conversationId: string; response: string }> {
     const fixedTenant = this.getFixedTenant(tenant);
     const conv = this.conversations.getOrCreate(conversationId, fixedTenant);
@@ -139,10 +157,10 @@ export class IrisAgent {
     }
 
     // ========== NORMAL MODE: Load rules and proceed ==========
-    // Add user message
+    // Add user message (with images if provided)
     this.conversations.addMessage(conv.id, {
       role: 'user',
-      content: userMessage,
+      content: this.buildMessageContent(userMessage, images),
       timestamp: new Date(),
     });
 
@@ -296,7 +314,8 @@ export class IrisAgent {
     tenant: TenantContext,
     userMessage: string,
     conversationId: string | undefined,
-    onChunk: StreamCallback
+    onChunk: StreamCallback,
+    images?: ImageContent[]
   ): Promise<{ conversationId: string }> {
     const fixedTenant = this.getFixedTenant(tenant);
     const conv = this.conversations.getOrCreate(conversationId, fixedTenant);
@@ -356,7 +375,7 @@ export class IrisAgent {
     // ========== NORMAL MODE: Load rules and proceed ==========
     this.conversations.addMessage(conv.id, {
       role: 'user',
-      content: userMessage,
+      content: this.buildMessageContent(userMessage, images),
       timestamp: new Date(),
     });
 

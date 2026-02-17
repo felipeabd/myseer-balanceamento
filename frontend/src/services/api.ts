@@ -27,13 +27,39 @@ export class ApiService {
     conversationId: string | undefined,
     onChunk: (text: string) => void,
     onComplete: (conversationId: string) => void,
-    onError: (error: Error) => void
+    onError: (error: Error) => void,
+    images?: Array<{ data: string; mediaType: string }>
   ): Promise<void> {
     try {
+      // Build request body with images if provided
+      const requestBody: {
+        message: string;
+        conversationId?: string;
+        images?: Array<{
+          type: 'image';
+          source: {
+            type: 'base64';
+            media_type: string;
+            data: string;
+          };
+        }>;
+      } = { message, conversationId };
+
+      if (images && images.length > 0) {
+        requestBody.images = images.map(img => ({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: img.mediaType,
+            data: img.data,
+          },
+        }));
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/iris/chat/stream`, {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify({ message, conversationId }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {

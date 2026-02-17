@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MessageList } from './MessageList';
-import { MessageInput } from './MessageInput';
+import { MessageInput, type ImageData } from './MessageInput';
 import { ConversationList } from './ConversationList';
 import { ApiService } from '../services/api';
 import type { Message, Conversation, ChatContextType } from '../types';
@@ -29,8 +29,8 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
     }
   };
 
-  const handleSendMessage = async (messageText: string) => {
-    if (!messageText.trim()) return;
+  const handleSendMessage = async (messageText: string, images?: ImageData[]) => {
+    if (!messageText.trim() && (!images || images.length === 0)) return;
 
     // Create user message
     const userMessage: Message = {
@@ -122,7 +122,8 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
               messages: [...prev.messages, errorMessage],
             };
           });
-        }
+        },
+        images
       );
     } catch (error) {
       console.error('Failed to send message:', error);

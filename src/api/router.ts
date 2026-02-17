@@ -37,14 +37,14 @@ export function createIrisRouter(agent: IrisAgent): Router {
    */
   router.post('/chat', async (req: Request, res: Response) => {
     try {
-      const { message, conversationId } = req.body as ChatRequest;
+      const { message, images, conversationId } = req.body as ChatRequest;
 
       if (!message || typeof message !== 'string') {
         res.status(400).json({ error: 'message is required' });
         return;
       }
 
-      const result = await agent.chat(req.tenant!, message, conversationId);
+      const result = await agent.chat(req.tenant!, message, conversationId, images);
 
       res.json({
         conversationId: result.conversationId,
@@ -67,7 +67,7 @@ export function createIrisRouter(agent: IrisAgent): Router {
    */
   router.post('/chat/stream', async (req: Request, res: Response) => {
     try {
-      const { message, conversationId } = req.body as ChatRequest;
+      const { message, images, conversationId } = req.body as ChatRequest;
 
       if (!message || typeof message !== 'string') {
         res.status(400).json({ error: 'message is required' });
@@ -90,7 +90,8 @@ export function createIrisRouter(agent: IrisAgent): Router {
           } else {
             res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
           }
-        }
+        },
+        images
       );
 
       // Send conversation ID as final event before closing

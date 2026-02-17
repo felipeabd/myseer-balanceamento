@@ -43,7 +43,8 @@ async function main() {
     credentials: true,
   }));
 
-  app.use(express.json());
+  // Increase limit to support base64 images (default is 100kb)
+  app.use(express.json({ limit: '50mb' }));
 
   // Health check
   app.get('/health', (_req, res) => {
