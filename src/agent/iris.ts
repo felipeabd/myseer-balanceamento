@@ -36,17 +36,7 @@ export class IrisAgent {
   private csvStore: CsvStore;
   private baseUrl: string;
 
-  // TEMPORARY: Fixed tenant for development until multi-tenant filtering is properly implemented
-  private readonly FIXED_TENANT_ID = '7489598B-A6AC-4AB3-B1BB-5221DBC8EAB5';
   private readonly AGENT_NAME = 'iris_balanceamento';
-
-  /** Get tenant context with fixed tenant ID */
-  private getFixedTenant(tenant: TenantContext): TenantContext {
-    return {
-      ...tenant,
-      tenantId: this.FIXED_TENANT_ID,
-    };
-  }
 
   /** Build message content (text only or multimodal with images) */
   private buildMessageContent(text: string, images?: ImageContent[]): MessageContent {
@@ -103,8 +93,8 @@ export class IrisAgent {
     conversationId?: string,
     images?: ImageContent[]
   ): Promise<{ conversationId: string; response: string }> {
-    const fixedTenant = this.getFixedTenant(tenant);
-    const conv = this.conversations.getOrCreate(conversationId, fixedTenant);
+    
+    const conv = this.conversations.getOrCreate(conversationId, tenant);
 
     // ========== RULE TRAINING MODE DETECTION ==========
     // 1. Check if user wants to enter training mode (explicit command)
@@ -122,7 +112,7 @@ export class IrisAgent {
       // Activate training session
       await this.sessionManager.startTrainingSession(
         conv.id,
-        fixedTenant.tenantId,
+        tenant.tenantId,
         tenant.userEmail
       );
 
@@ -130,7 +120,7 @@ export class IrisAgent {
       const response = await this.ruleTrainer.chat(
         ruleMessage || 'Iniciar treinamento de regras',
         conv.id,
-        fixedTenant
+        tenant
       );
 
       return {
@@ -147,7 +137,7 @@ export class IrisAgent {
       const response = await this.ruleTrainer.chat(
         userMessage,
         conv.id,
-        fixedTenant
+        tenant
       );
 
       return {
@@ -165,8 +155,8 @@ export class IrisAgent {
     });
 
     // Load active rules and inject into prompt
-    const rulesPrompt = await this.loadRulesSkill.execute(fixedTenant.tenantId);
-    const systemPrompt = buildSystemPrompt(fixedTenant, this.rules) + rulesPrompt;
+    const rulesPrompt = await this.loadRulesSkill.execute(tenant.tenantId);
+    const systemPrompt = buildSystemPrompt(tenant, this.rules) + rulesPrompt;
     const messages = this.buildAnthropicMessages(conv.messages);
 
     let toolCallCount = 0;
@@ -278,7 +268,7 @@ export class IrisAgent {
 
     // Track token usage (use fixed tenant for consistency with queries)
     await this.usageTracker.trackUsage({
-      tenantId: fixedTenant.tenantId,
+      tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
       conversationId: conv.id,
       model: this.model,
@@ -291,7 +281,7 @@ export class IrisAgent {
     const responseTime = Date.now() - startTime;
     await this.conversationLogger.log({
       agent: this.AGENT_NAME,
-      tenantId: fixedTenant.tenantId,
+      tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
       conversationId: conv.id,
       userQuestion: userMessage,
@@ -317,8 +307,8 @@ export class IrisAgent {
     onChunk: StreamCallback,
     images?: ImageContent[]
   ): Promise<{ conversationId: string }> {
-    const fixedTenant = this.getFixedTenant(tenant);
-    const conv = this.conversations.getOrCreate(conversationId, fixedTenant);
+    
+    const conv = this.conversations.getOrCreate(conversationId, tenant);
 
     // ========== RULE TRAINING MODE DETECTION ==========
     // 1. Check if user wants to enter training mode (explicit command)
@@ -336,7 +326,7 @@ export class IrisAgent {
       // Activate training session
       await this.sessionManager.startTrainingSession(
         conv.id,
-        fixedTenant.tenantId,
+        tenant.tenantId,
         tenant.userEmail
       );
 
@@ -380,8 +370,8 @@ export class IrisAgent {
     });
 
     // Load active rules and inject into prompt
-    const rulesPrompt = await this.loadRulesSkill.execute(fixedTenant.tenantId);
-    const systemPrompt = buildSystemPrompt(fixedTenant, this.rules) + rulesPrompt;
+    const rulesPrompt = await this.loadRulesSkill.execute(tenant.tenantId);
+    const systemPrompt = buildSystemPrompt(tenant, this.rules) + rulesPrompt;
     const messages = this.buildAnthropicMessages(conv.messages);
 
     let toolCallCount = 0;
@@ -508,7 +498,7 @@ export class IrisAgent {
 
     // Track token usage (use fixed tenant for consistency with queries)
     await this.usageTracker.trackUsage({
-      tenantId: fixedTenant.tenantId,
+      tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
       conversationId: conv.id,
       model: this.model,
@@ -521,7 +511,7 @@ export class IrisAgent {
     const responseTime = Date.now() - startTime;
     await this.conversationLogger.log({
       agent: this.AGENT_NAME,
-      tenantId: fixedTenant.tenantId,
+      tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
       conversationId: conv.id,
       userQuestion: userMessage,
@@ -550,9 +540,9 @@ export class IrisAgent {
       console.log('[Iris Tool] clickhouse_query SQL:', sql);
 
       // TEMPORARY: Override tenant with fixed tenant ID for development
-      const fixedTenant = this.getFixedTenant(tenant);
+      
 
-      const rows = await this.clickhouse.query(sql, fixedTenant);
+      const rows = await this.clickhouse.query(sql, tenant);
       console.log('[Iris Tool] Result rows:', Array.isArray(rows) ? rows.length : 0);
 
       // Auto-truncate large results to prevent context overflow
@@ -668,10 +658,10 @@ export class IrisAgent {
       }
 
       // TEMPORARY: Override tenant with fixed tenant ID for development
-      const fixedTenant = this.getFixedTenant(tenant);
+      
 
       // Fetch data from ClickHouse based on filters
-      const products = await this.fetchProductsForOptimization(filters, fixedTenant);
+      const products = await this.fetchProductsForOptimization(filters, tenant);
 
       if (products.length === 0) {
         return JSON.stringify({
@@ -683,7 +673,7 @@ export class IrisAgent {
       console.log('[Iris Tool] optimize_batch products found:', products.length);
 
       // Load active rules for this tenant
-      const rules = await this.loadActiveRules(fixedTenant.tenantId);
+      const rules = await this.loadActiveRules(tenant.tenantId);
       console.log('[Iris Tool] Active rules loaded:', rules.length);
 
       // Call Python optimizer with rules
