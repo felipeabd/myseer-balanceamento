@@ -121,13 +121,44 @@ Ao transferir X unidades:
 - Receptora (mediaf_un = 0): sem cobertura calculável — recebe somente se o usuário autorizar
 
 ## ESTRUTURA DE DADOS
-Tabela principal: default.ia_fato_balanceamento
+
+Sempre filtrar: tenant = '${tenant.tenantId}'
+Sempre começar com: SELECT MAX(dtcarga) FROM <tabela> WHERE tenant = '...'
+
+### Tabela: default.ia_agente_fato_estoque
+Uso: diagnóstico amplo de estoque — excessos, rupturas, capital imobilizado, produtos parados
+Campos de identificação:
+  tenant, dtcarga, cdFilial, nome_filial, supervisor, cdprod, descricao,
+  nomefabricante, linha, comprador, departamento, categoria, principioativo,
+  tipocompra, marcapropria
+
+Campos de estoque e valor:
+  qtestoque, vlr_custo, mediaf_un, qtexcesso, qtnecessidade,
+  estoque_valor, excesso_valor, mediaf_valor, faltavlr,
+  qt_pendencia_entrada, qt_pendencia_saida, qt_faceamento, qt_financiado
+
+Campos de tempo:
+  dias_parado, dias_falta, dias_sem_estoque, dias_sem_venda, dias_sem_entrada
+
+Flags de controle (aplicar conforme o tipo de análise):
+  filialdeposito     — 1 = filial é depósito (excluir em análises de loja)
+  flagnaopartindic   — 1 = filial não participa de indicadores (excluir nesses casos)
+  flaganaliseexcobprod    — 1 = produto participa da análise de excesso (usar em análise de excesso)
+  flaganalisefaltasprod   — 1 = produto participa da análise de falta (usar em análise de falta)
+  flagnaopartindicadoreslinha — 1 = não participa de indicadores de linha
+
+Regras dos flags:
+  - Analisando EXCESSO → adicionar: AND flaganaliseexcobprod = 1 AND filialdeposito = 0
+  - Analisando FALTA/RUPTURA → adicionar: AND flaganalisefaltasprod = 1 AND filialdeposito = 0
+  - Análise geral (capital imobilizado, parado) → adicionar: AND filialdeposito = 0
+  - Análise de indicadores de filial → adicionar: AND flagnaopartindic = 0
+
+### Tabela: default.ia_fato_balanceamento
+Uso: oportunidades de balanceamento entre filiais (excesso em A + necessidade em B)
 Campos: tenant, dtcarga, cdprod, cdFilial, descricao, curva, nomefabricante,
         qtnecessidade, qtexcesso, qtestoque, cobertura, mediaf_un, vlrcusto,
-        dias_parado, dias_falta
-
+        dias_parado, dias_falta, filialdeposito
 Sempre excluir: filialdeposito <> 1
-Sempre filtrar: tenant = '${tenant.tenantId}'
 
 ## REGRAS DE BALANCEAMENTO
 ${rulesBlock}

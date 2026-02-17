@@ -10,9 +10,32 @@ export const agentTools: Anthropic.Tool[] = [
     description: `Execute a read-only SQL query against the ClickHouse database.
 The query MUST:
 - Be a SELECT statement only
-- Include the tenant filter in the WHERE clause
-- Include filialdeposito <> 1
-- Target the table default.ia_fato_balanceamento
+- Always include the tenant filter in the WHERE clause
+- Always start by fetching MAX(dtcarga) before querying data tables
+
+Available tables:
+
+**default.ia_fato_balanceamento** — balancing opportunities between branches
+Fields: tenant, dtcarga, cdprod, cdFilial, descricao, curva, nomefabricante,
+  qtnecessidade, qtexcesso, qtestoque, cobertura, mediaf_un, vlrcusto,
+  dias_parado, dias_falta, filialdeposito
+Always filter: filialdeposito <> 1
+
+**default.ia_agente_fato_estoque** — full inventory status per product/branch
+Fields: tenant, dtcarga, cdFilial, nome_filial, supervisor, filialdeposito,
+  flagnaopartindic, cdprod, descricao, nomefabricante, linha, comprador,
+  departamento, categoria, principioativo, tipocompra, marcapropria,
+  flaganaliseexcobprod, flaganalisefaltasprod, flagnaopartindicadoreslinha,
+  qtestoque, vlr_custo, mediaf_un, qtexcesso, qtnecessidade,
+  estoque_valor, excesso_valor, mediaf_valor, faltavlr,
+  qt_pendencia_entrada, qt_pendencia_saida,
+  dias_parado, dias_falta, dias_sem_estoque, dias_sem_venda, dias_sem_entrada,
+  qt_faceamento, qt_financiado, percent_vlr
+Flag filters (apply based on analysis type):
+  - Excess analysis: AND flaganaliseexcobprod = 1
+  - Shortage analysis: AND flaganalisefaltasprod = 1
+  - Exclude non-indicator branches: AND flagnaopartindic = 0
+  - Exclude deposit branches: AND filialdeposito = 0
 
 Return format: array of JSON objects (one per row).
 Maximum 500 rows returned.`,
