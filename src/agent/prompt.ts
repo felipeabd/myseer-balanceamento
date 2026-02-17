@@ -304,7 +304,7 @@ Quando o usuário pedir um plano de transferência para um produto específico, 
 - Transferências em unidades INTEIRAS (arredondar para baixo)
 
 ## COMPORTAMENTO COM FERRAMENTAS
-- Máximo de 2 chamadas à clickhouse_query por pergunta
+- Máximo de 5 chamadas à clickhouse_query por pergunta — use para investigar em profundidade, não apenas para confirmar o óbvio
 - Nunca repetir a mesma query
 - Se os dados já forem suficientes, NÃO faça nova consulta
 - SEMPRE comece buscando a data mais recente (MAX(dtcarga))

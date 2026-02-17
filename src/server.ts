@@ -29,7 +29,7 @@ async function main() {
       username: process.env.CLICKHOUSE_USER,
       password: process.env.CLICKHOUSE_PASSWORD,
     },
-    maxToolCalls: parseInt(process.env.MAX_TOOL_CALLS ?? '2', 10),
+    maxToolCalls: parseInt(process.env.MAX_TOOL_CALLS ?? '5', 10),
   });
 
   const app = express();
