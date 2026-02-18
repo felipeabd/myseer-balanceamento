@@ -82,6 +82,24 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItems = items.filter(item => item.type.startsWith('image/'));
+    if (imageItems.length === 0) return;
+
+    e.preventDefault();
+    imageItems.forEach(item => {
+      const file = item.getAsFile();
+      if (!file) return;
+      setImageFiles(prev => [...prev, file]);
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setImagePreviews(prev => [...prev, ev.target?.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -149,6 +167,7 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder="Pergunte sobre estoque, rupturas, balanceamento..."
           disabled={disabled}
           rows={1}
