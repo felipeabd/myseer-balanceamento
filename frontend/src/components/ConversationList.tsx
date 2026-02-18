@@ -31,7 +31,7 @@ export function ConversationList({
           Agentes Myseer
         </p>
 
-        {/* Gestor de Estoque — always active (only agent for now) */}
+        {/* Gestor de Estoque — active */}
         <div
           className="flex items-center gap-2.5 rounded-lg px-2 py-2 cursor-pointer transition-all hover:shadow-sm hover:brightness-95 active:scale-[0.98]"
           style={{ background: 'linear-gradient(135deg, #e8f7fa 0%, #eceaf8 100%)', borderLeft: '3px solid #2A81B8' }}
@@ -45,6 +45,36 @@ export function ConversationList({
             </svg>
           </div>
           <span className="text-sm font-medium" style={{ color: '#272154' }}>Gestor de Estoque</span>
+        </div>
+
+        {/* Gestor de Vendas — em breve */}
+        <div
+          className="flex items-center gap-2.5 rounded-lg px-2 py-2 opacity-50 cursor-not-allowed"
+        >
+          <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 bg-gray-200">
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-medium text-gray-500">Gestor de Vendas</span>
+            <span className="text-[10px] text-gray-400">Em breve</span>
+          </div>
+        </div>
+
+        {/* Gestor de Mercado — em breve */}
+        <div
+          className="flex items-center gap-2.5 rounded-lg px-2 py-2 opacity-50 cursor-not-allowed"
+        >
+          <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 bg-gray-200">
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-medium text-gray-500">Gestor de Mercado</span>
+            <span className="text-[10px] text-gray-400">Em breve</span>
+          </div>
         </div>
       </div>
 
