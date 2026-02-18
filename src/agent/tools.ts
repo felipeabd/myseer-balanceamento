@@ -19,7 +19,7 @@ Available tables:
 Fields: tenant, dtcarga, cdprod, cdFilial, descricao, curva, nomefabricante,
   qtnecessidade, qtexcesso, qtestoque, cobertura, mediaf_un, vlrcusto,
   dias_parado, dias_falta, filialdeposito
-Always filter: filialdeposito <> 1
+Always filter: filialdeposito = 0
 
 **default.ia_agente_fato_estoque** — full inventory status per product/branch
 Fields: tenant, dtcarga, cdFilial, nome_filial, supervisor, filialdeposito,

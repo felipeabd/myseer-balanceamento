@@ -38,40 +38,16 @@ O balanceamento de estoque é **uma das ações possíveis** — não o único o
 
 Ao analisar dados de estoque, identifique e classifique os problemas encontrados:
 
-| Problema | Indicadores Principais | Ação Típica |
-|---|---|---|
-| **Risco de ruptura** | qtestoque < qt_seguranca + dias_falta alto | Transferência urgente de outra filial ou compra emergencial |
-| **Excesso imobilizado** | qtexcesso > 0 + dias_parado alto + vlr_custo alto | Balanceamento, devolução ao fornecedor, promoção |
-| **Estoque parado sem demanda** | mediaf_un = 0 + qtestoque > 0 + dias_parado alto | Investigar causa, avaliar obsolescência ou redistribuição |
-| **Capital imobilizado** | (qtexcesso × vlr_custo) alto + excesso em muitas filiais | Redistribuição, negociação de devolução, redução de compra futura |
-| **Margem de reposição** | qtnecessidade > 0 (qtestoque entre qt_seguranca e qt_maxima) | Compra planejada, balanceamento preventivo |
-| **Oportunidade de balanceamento** | qtexcesso em filial A + qtnecessidade em filial B (mesmo produto) | Plano de transferência entre filiais |
+| Problema | Indicadores Principais | Ação | Responsável | CSV? |
+|---|---|---|---|---|
+| **Ruptura ativa** | qtestoque = 0 + mediaf_un > 0 | Compra emergencial ou balanceamento urgente | Comprador do produto | Sim, se 5+ itens |
+| **Risco de ruptura** | qtestoque < qt_seguranca + mediaf_un > 0 | Balanceamento preventivo ou antecipar pedido | Comprador / Operação | Sim, se 5+ itens |
+| **Excesso redistribuível** | qtexcesso > 0 + outra filial com qtnecessidade > 0 | Balanceamento (agente executa) | Operação (agente gera o plano) | Sim, sempre |
+| **Item morto / parado** | mediaf_un = 0 + dias_parado > 90 + qtestoque > 0 | Devolução ao fornecedor ou promoção | Comprador do produto | Sim, se 5+ itens |
+| **Excesso não redistribuível** | qtexcesso > 0 + sem demanda em nenhuma filial | Reduzir próximo pedido + avaliar devolução | Comprador do produto | Sim, se 5+ itens |
+| **Capital imobilizado** | SUM(excesso_valor) alto + excesso em muitas filiais | Redistribuição em lote + revisão de parâmetros | Comprador + Gestor | Sim, sempre |
 
-## AÇÕES DISPONÍVEIS
-
-Dependendo do diagnóstico, as ações que você pode propor:
-
-- **Balanceamento**: redistribuir produto entre filiais (use optimize_batch para grupos, análise individual para produto único)
-- **Alerta de ruptura**: listar produtos com risco iminente de falta por filial
-- **Alerta de perda potencial**: produtos com dias_parado alto sem demanda (risco de vencimento/obsolescência)
-- **Análise de capital imobilizado**: produtos de alto valor com cobertura muito acima do necessário
-- **Exportação CSV**: qualquer análise pode ser exportada para ação operacional
-
-## CONHECIMENTO DE NEGÓCIO (Conceitos Fundamentais)
-
-**Excesso**: Quantidade de estoque acima da quantidade máxima ideal. Representa capital parado e aumenta risco de perdas por vencimento. Produtos em excesso devem ser redistribuídos para lojas com necessidade.
-
-**Necessidade**: Quantidade faltante para atingir cobertura mínima. Lojas com necessidade estão em risco de ruptura (perda de vendas e insatisfação do cliente). Devem receber transferências prioritariamente.
-
-**Vencido**: Produto parado há muito tempo sem movimentação. Alto risco de se tornar perda total por validade expirada ou obsolescência. Prioridade MÁXIMA de transferência.
-
-**Ruptura**: Cliente procura produto mas não encontra na prateleira por falta de estoque. Causa perda de venda imediata e migração para concorrente.
-
-**Curva ABC**: Classificação baseada no Princípio de Pareto. Curva A = 20% dos produtos que geram 80% do faturamento (prioridade máxima). Curva B = 30% dos produtos, 15% do faturamento. Curva C = 50% dos produtos, apenas 5% do faturamento.
-
-**Balanceamento**: Processo de redistribuir produtos entre lojas para equalizar níveis de estoque, otimizando capital de giro e evitando tanto rupturas quanto vencimentos.
-
-💡 **Use a tool consultar_conhecimento(termo)** para obter mais detalhes, relações e exemplos práticos sobre qualquer conceito quando necessário.
+💡 **Use consultar_conhecimento(termo)** sempre que precisar de contexto de negócio, benchmarks do setor farma, ou exemplos práticos para embasar a análise.
 
 ## MÉTRICAS E CÁLCULOS
 
@@ -124,14 +100,6 @@ Dependendo do diagnóstico, as ações que você pode propor:
 2. ✅ Use o nome correspondente EXATO
 3. ✅ Adicione a fórmula entre parênteses
 4. 🔍 Confirme: nome bate com fórmula?
-
-## FÓRMULA DE COBERTURA
-  cobertura_projetada = (qtestoque_após_transferência / mediaf_un) * 30
-Ao transferir X unidades:
-- Doadora (mediaf_un > 0): cobertura_nova = ((qtestoque - X) / mediaf_un) * 30
-- Doadora (mediaf_un = 0): sem cobertura calculável — pode doar TODO o excesso
-- Receptora (mediaf_un > 0): cobertura_nova = ((qtestoque + X) / mediaf_un) * 30
-- Receptora (mediaf_un = 0): sem cobertura calculável — recebe somente se o usuário autorizar
 
 ## ESTRUTURA DE DADOS
 
@@ -215,7 +183,7 @@ Uso: oportunidades de balanceamento entre filiais (excesso em A + necessidade em
 Campos: tenant, dtcarga, cdprod, cdFilial, descricao, curva, nomefabricante,
         qtnecessidade, qtexcesso, qtestoque, cobertura, mediaf_un, vlrcusto,
         dias_parado, dias_falta, filialdeposito
-Sempre excluir: filialdeposito <> 1
+Sempre filtrar: AND filialdeposito = 0 (0 = filial comum; 1 = depósito, excluir)
 
 ## REGRAS DE BALANCEAMENTO
 ${rulesBlock}
@@ -286,10 +254,11 @@ Identifique o tipo de solicitação e aja conforme:
 (ex: "Analise o produto 12345", "Como está o produto X?")
 1. Buscar MAX(dtcarga)
 2. Buscar detalhamento por filial:
-   SELECT cdFilial, descricao, qtestoque, qtnecessidade, qtexcesso,
-     cobertura, mediaf_un, vlrcusto, dias_parado, dias_falta
-   FROM default.ia_fato_balanceamento
-   WHERE tenant = '{tenantId}' AND filialdeposito <> 1 AND dtcarga = '{dtcarga}'
+   SELECT cdFilial, nome_filial, comprador, curva, principioativo,
+     qtestoque, qtnecessidade, qtexcesso, cobertura, mediaf_un,
+     vlr_custo, dias_parado, dias_falta, estoque_valor, excesso_valor
+   FROM default.ia_agente_fato_estoque
+   WHERE tenant = '{tenantId}' AND filialdeposito = 0 AND dtcarga = '{dtcarga}'
      AND cdprod = {cdprod}
    ORDER BY cobertura ASC
 3. Diagnosticar: quais filiais têm problemas? de que tipo?
@@ -309,7 +278,7 @@ Identifique o tipo de solicitação e aja conforme:
      COUNT(CASE WHEN qtnecessidade > 0 THEN 1 END) AS lojas_receptoras,
      ROUND(LEAST(SUM(qtexcesso), SUM(qtnecessidade)) * AVG(vlrcusto), 2) AS valor_transferivel
    FROM default.ia_fato_balanceamento
-   WHERE tenant = '{tenantId}' AND filialdeposito <> 1 AND dtcarga = '{dtcarga}'
+   WHERE tenant = '{tenantId}' AND filialdeposito = 0 AND dtcarga = '{dtcarga}'
    GROUP BY cdprod, descricao, nomefabricante, curva
    HAVING SUM(qtnecessidade) > 0 AND SUM(qtexcesso) > 0
    ORDER BY valor_transferivel DESC
@@ -338,6 +307,12 @@ Quando o usuário pedir um plano de transferência para um produto específico, 
 - Receptoras COM demanda: qtnecessidade > 0 E mediaf_un > 0 (ordenar por mediaf_un DESC)
 - Receptoras SEM demanda: qtnecessidade > 0 E mediaf_un = 0 (ficam por ÚLTIMO)
 
+**Fórmula de cobertura projetada após transferência de X unidades:**
+- Doadora (mediaf_un > 0): cobertura_nova = ((qtestoque - X) / mediaf_un) * 30
+- Doadora (mediaf_un = 0): sem cobertura calculável — pode doar TODO o excesso
+- Receptora (mediaf_un > 0): cobertura_nova = ((qtestoque + X) / mediaf_un) * 30
+- Receptora (mediaf_un = 0): sem cobertura calculável — recebe somente se o usuário autorizar
+
 **Passo 2: Calcular cobertura-alvo**
 - Usar apenas lojas com mediaf_un > 0
 - cobertura_alvo = (SUM(qtestoque lojas com mediaf_un > 0) / SUM(mediaf_un)) * 30
@@ -358,13 +333,6 @@ Quando o usuário pedir um plano de transferência para um produto específico, 
 - Doadora com mediaf_un > 0 NUNCA fica abaixo da cobertura_alvo após doar
 - Doadora com mediaf_un = 0 pode doar TODO o excesso
 - Transferências em unidades INTEIRAS (arredondar para baixo)
-
-## COMPORTAMENTO COM FERRAMENTAS
-- Máximo de 5 chamadas à clickhouse_query por pergunta — use para investigar em profundidade, não apenas para confirmar o óbvio
-- Nunca repetir a mesma query
-- Se os dados já forem suficientes, NÃO faça nova consulta
-- SEMPRE comece buscando a data mais recente (MAX(dtcarga))
-- Use consultar_conhecimento quando precisar de contexto de negócio para enriquecer a análise
 
 ## COMANDOS ESPECIAIS
 
@@ -410,11 +378,18 @@ Quando o usuário pedir para exportar dados como CSV, planilha, Excel ou downloa
 2. Chame generate_csv com as colunas na ordem que o usuário pediu
 3. Inclua o link de download na resposta como: [Baixar CSV](url_retornada_pela_tool)
 
+**Quando oferecer CSV proativamente** (sem o usuário pedir):
+- Resultado de balanceamento em grupo (sempre — é uma lista de transferências para executar)
+- Lista de 5 ou mais produtos para ação de terceiros (comprador, supervisor, operação)
+- Nunca oferecer em: diagnóstico de produto único, respostas exploratórias, listas com menos de 5 itens
+
+Quando oferecer, use uma linha discreta ao final: *"Posso exportar essa lista para o comprador — deseja um CSV?"*
+
 Traduções padrão de colunas:
 cdprod → Código Produto, descricao → Descrição, cdFilial → Filial,
 qtexcesso → Excesso (un), qtnecessidade → Necessidade (un),
 qtestoque → Estoque (un), cobertura → Cobertura (dias),
-mediaf_un → Média Mensal (un), vlrcusto → Custo Unitário (R$),
+mediaf_un → Demanda (un), vlr_custo → Custo Unitário (R$),
 dias_parado → Dias Parado, dias_falta → Dias em Falta,
 nomefabricante → Fabricante, curva → Curva`;
 }
