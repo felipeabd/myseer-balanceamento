@@ -127,7 +127,7 @@ export function CreditsPanel({ apiService, onClose }: CreditsPanelProps) {
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${v.toFixed(2)}`} width={60} />
-                      <Tooltip formatter={(v: number) => formatBrl(v)} labelStyle={{ fontSize: 12 }} />
+                      <Tooltip formatter={(v: any) => formatBrl(Number(v))} labelStyle={{ fontSize: 12 }} />
                       <Bar dataKey="costBrl" name="Custo (R$)" radius={[4, 4, 0, 0]}
                         fill="url(#gradBar)" />
                       <defs>
@@ -152,7 +152,7 @@ export function CreditsPanel({ apiService, onClose }: CreditsPanelProps) {
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="hour" tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${v.toFixed(2)}`} width={60} />
-                      <Tooltip formatter={(v: number) => formatBrl(v)} labelStyle={{ fontSize: 12 }} />
+                      <Tooltip formatter={(v: any) => formatBrl(Number(v))} labelStyle={{ fontSize: 12 }} />
                       <Line type="monotone" dataKey="costBrl" name="Custo (R$)"
                         stroke="#28B8CE" strokeWidth={2} dot={{ r: 3 }} />
                     </LineChart>
@@ -175,7 +175,7 @@ export function CreditsPanel({ apiService, onClose }: CreditsPanelProps) {
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `R$${v.toFixed(2)}`} />
                       <YAxis type="category" dataKey="userEmail" tick={{ fontSize: 11 }} width={140} />
-                      <Tooltip formatter={(v: number) => formatBrl(v)} labelStyle={{ fontSize: 12 }} />
+                      <Tooltip formatter={(v: any) => formatBrl(Number(v))} labelStyle={{ fontSize: 12 }} />
                       <Bar dataKey="costBrl" name="Custo (R$)" radius={[0, 4, 4, 0]} fill="#494495" />
                     </BarChart>
                   </ResponsiveContainer>
