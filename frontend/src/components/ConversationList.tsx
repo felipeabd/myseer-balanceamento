@@ -23,7 +23,6 @@ export function ConversationList({
           <img src="/myseer-logo.png" alt="Myseer" className="h-9 w-auto" />
         </div>
         <p className="text-xs mb-3" style={{ color: '#2A81B8' }}>Iris · Gestor de Estoque</p>
-        <div>
         <button
           onClick={onNewConversation}
           className="w-full rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors"
