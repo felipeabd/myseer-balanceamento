@@ -1,34 +1,5 @@
 import type { Conversation } from '../types';
 
-function MyseerLogo({ size = 36 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="cl-grad" x1="10" y1="10" x2="90" y2="90" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#28B8CE" />
-          <stop offset="50%" stopColor="#2A81B8" />
-          <stop offset="100%" stopColor="#494495" />
-        </linearGradient>
-      </defs>
-      {/* Outer hexagon */}
-      <polygon points="50,4 91,27 91,73 50,96 9,73 9,27" fill="none" stroke="url(#cl-grad)" strokeWidth="2.5" />
-      {/* Middle hexagon */}
-      <polygon points="50,22 73,35 73,65 50,78 27,65 27,35" fill="none" stroke="url(#cl-grad)" strokeWidth="1.5" />
-      {/* Inner hexagon */}
-      <polygon points="50,36 63,43 63,57 50,64 37,57 37,43" fill="none" stroke="url(#cl-grad)" strokeWidth="1.2" />
-      {/* Center to outer vertices */}
-      <line x1="50" y1="50" x2="50" y2="4" stroke="url(#cl-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="91" y2="27" stroke="url(#cl-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="91" y2="73" stroke="url(#cl-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="50" y2="96" stroke="url(#cl-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="9" y2="73" stroke="url(#cl-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="9" y2="27" stroke="url(#cl-grad)" strokeWidth="1.2" />
-      {/* Center dot */}
-      <circle cx="50" cy="50" r="5" fill="url(#cl-grad)" />
-    </svg>
-  );
-}
-
 interface ConversationListProps {
   conversations: Conversation[];
   currentConversationId?: string;
@@ -48,15 +19,11 @@ export function ConversationList({
     <div className="w-64 border-r border-gray-200 flex flex-col" style={{ backgroundColor: '#f8f9fc' }}>
       {/* Header */}
       <div className="border-b border-gray-200 bg-white p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <MyseerLogo size={32} />
-          <div>
-            <span className="font-bold text-base" style={{ color: '#272154', letterSpacing: '0.02em' }}>
-              Iris
-            </span>
-            <p className="text-xs" style={{ color: '#2A81B8' }}>Gestor de Estoque</p>
-          </div>
+        <div className="mb-1">
+          <img src="/myseer-logo.png" alt="Myseer" className="h-9 w-auto" />
         </div>
+        <p className="text-xs mb-3" style={{ color: '#2A81B8' }}>Iris · Gestor de Estoque</p>
+        <div>
         <button
           onClick={onNewConversation}
           className="w-full rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors"

@@ -11,3 +11,6 @@ dist/
 nul
 *.png
 screenshot_*.png
+
+# Allow brand assets in frontend/public
+!frontend/public/*.png

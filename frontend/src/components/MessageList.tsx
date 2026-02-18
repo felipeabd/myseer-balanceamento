@@ -28,29 +28,6 @@ const STARTER_PROMPTS = [
   },
 ];
 
-function MyseerLogo({ size = 56 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="ml-grad" x1="10" y1="10" x2="90" y2="90" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#28B8CE" />
-          <stop offset="50%" stopColor="#2A81B8" />
-          <stop offset="100%" stopColor="#494495" />
-        </linearGradient>
-      </defs>
-      <polygon points="50,4 91,27 91,73 50,96 9,73 9,27" fill="none" stroke="url(#ml-grad)" strokeWidth="2.5" />
-      <polygon points="50,22 73,35 73,65 50,78 27,65 27,35" fill="none" stroke="url(#ml-grad)" strokeWidth="1.5" />
-      <polygon points="50,36 63,43 63,57 50,64 37,57 37,43" fill="none" stroke="url(#ml-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="50" y2="4" stroke="url(#ml-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="91" y2="27" stroke="url(#ml-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="91" y2="73" stroke="url(#ml-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="50" y2="96" stroke="url(#ml-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="9" y2="73" stroke="url(#ml-grad)" strokeWidth="1.2" />
-      <line x1="50" y1="50" x2="9" y2="27" stroke="url(#ml-grad)" strokeWidth="1.2" />
-      <circle cx="50" cy="50" r="5" fill="url(#ml-grad)" />
-    </svg>
-  );
-}
 
 interface MessageListProps {
   messages: Message[];
@@ -74,15 +51,10 @@ export function MessageList({ messages, isLoading, onStarterPrompt }: MessageLis
       <div className="mx-auto max-w-4xl space-y-4">
         {messages.length === 0 && !isLoading && (
           <div className="text-center py-10">
-            <div className="flex justify-center mb-4">
-              <MyseerLogo size={64} />
+            <div className="flex justify-center mb-6">
+              <img src="/myseer-logo-vertical.png" alt="Myseer" className="h-36 w-auto" />
             </div>
-            <h2 className="text-2xl font-bold mb-1" style={{ color: '#272154' }}>
-              Iris
-            </h2>
-            <p className="text-sm mb-8" style={{ color: '#2A81B8' }}>
-              Gestor de Estoque · Myseer
-            </p>
+            <p className="text-sm font-medium mb-1" style={{ color: '#272154' }}>Iris · Gestor de Estoque</p>
             <p className="text-gray-500 mb-6 text-sm">
               Como posso ajudar com seu estoque hoje?
             </p>
