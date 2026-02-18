@@ -1,7 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { IrisAgent } from '../agent/iris';
 import { tenantMiddleware } from './middleware';
-import { ChatRequest } from '../types';
+import { ChatRequest, MessageContent } from '../types';
+
+/** Extract plain text from a message content (handles multimodal ContentBlock[]) */
+function extractText(content: MessageContent): string {
+  if (typeof content === 'string') return content;
+  const textBlock = content.find(b => b.type === 'text');
+  return textBlock ? (textBlock as { type: 'text'; text: string }).text : '';
+}
 
 /**
  * Creates an Express Router with IRIS agent endpoints.
@@ -112,11 +119,51 @@ export function createIrisRouter(agent: IrisAgent): Router {
 
   /**
    * GET /conversations
-   * List conversations for the current user.
+   * List conversations for the current tenant/user.
    */
   router.get('/conversations', (req: Request, res: Response) => {
-    // This is a simple placeholder — in production you'd query a DB
-    res.json({ conversations: [] });
+    const manager = agent.getConversationManager();
+    const convs = manager.listByUser(req.tenant!.tenantId, req.tenant!.userEmail);
+
+    const formatted = convs
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .map(c => {
+        const firstUserMsg = c.messages.find(m => m.role === 'user');
+        const lastAssistantMsg = [...c.messages].reverse().find(m => m.role === 'assistant');
+        const title = extractText(firstUserMsg?.content ?? '').substring(0, 60) || 'Nova conversa';
+        const lastMessage = extractText(lastAssistantMsg?.content ?? '').substring(0, 100);
+        return { id: c.id, title, lastMessage, updatedAt: c.updatedAt };
+      });
+
+    res.json({ conversations: formatted });
+  });
+
+  /**
+   * GET /conversations/:id
+   * Get a single conversation with full message history.
+   */
+  router.get('/conversations/:id', (req: Request, res: Response) => {
+    const manager = agent.getConversationManager();
+    const conv = manager.get(req.params['id'] as string);
+
+    if (!conv || conv.tenantId !== req.tenant!.tenantId) {
+      res.status(404).json({ error: 'Conversa não encontrada' });
+      return;
+    }
+
+    const firstUserMsg = conv.messages.find(m => m.role === 'user');
+    const lastAssistantMsg = [...conv.messages].reverse().find(m => m.role === 'assistant');
+    const title = extractText(firstUserMsg?.content ?? '').substring(0, 60) || 'Nova conversa';
+    const lastMessage = extractText(lastAssistantMsg?.content ?? '').substring(0, 100);
+
+    const messages = conv.messages.map((m, i) => ({
+      id: `${conv.id}-${i}`,
+      role: m.role,
+      content: extractText(m.content),
+      timestamp: m.timestamp,
+    }));
+
+    res.json({ id: conv.id, title, lastMessage, updatedAt: conv.updatedAt, messages });
   });
 
   /**
@@ -124,7 +171,9 @@ export function createIrisRouter(agent: IrisAgent): Router {
    * Delete a conversation.
    */
   router.delete('/conversations/:id', (req: Request, res: Response) => {
-    res.json({ deleted: true });
+    const manager = agent.getConversationManager();
+    const deleted = manager.delete(req.params['id'] as string);
+    res.json({ deleted });
   });
 
   /**

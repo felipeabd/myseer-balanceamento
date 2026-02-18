@@ -104,6 +104,8 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
             return { ...prev, id: conversationId };
           });
           setIsLoading(false);
+          // Refresh sidebar list so new/updated conversation appears
+          loadConversations();
         },
         // onError
         (error: Error) => {
@@ -137,10 +139,20 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
     setCurrentConversation(null);
   };
 
-  const handleSelectConversation = (conversationId: string) => {
-    const conv = conversations.find((c) => c.id === conversationId);
-    if (conv) {
+  const handleSelectConversation = async (conversationId: string) => {
+    try {
+      const conv = await apiService.getConversation(conversationId);
+      // Normalize timestamps from strings to Date objects
+      conv.updatedAt = new Date(conv.updatedAt);
+      if (conv.messages) {
+        conv.messages = conv.messages.map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp),
+        }));
+      }
       setCurrentConversation(conv);
+    } catch (error) {
+      console.error('Failed to load conversation:', error);
     }
   };
 

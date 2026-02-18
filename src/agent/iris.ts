@@ -90,6 +90,11 @@ export class IrisAgent {
     return this.creditsManager;
   }
 
+  /** Get conversation manager instance */
+  getConversationManager(): ConversationManager {
+    return this.conversations;
+  }
+
   /**
    * Process a user message and return the agent's response.
    * Handles the full agentic loop: LLM → tool call → LLM → response.

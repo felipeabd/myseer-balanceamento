@@ -154,6 +154,21 @@ export class ApiService {
   }
 
   /**
+   * Get a single conversation with full message history
+   */
+  async getConversation(conversationId: string): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/api/iris/conversations/${conversationId}`, {
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
    * Get credits info (contracted, used, available) + usage breakdown in BRL
    */
   async getCredits(): Promise<any> {
