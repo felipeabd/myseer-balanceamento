@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { MessageList } from './MessageList';
 import { MessageInput, type ImageData } from './MessageInput';
 import { ConversationList } from './ConversationList';
+import { CreditsPanel } from './CreditsPanel';
 import { ApiService } from '../services/api';
 import type { Message, Conversation, ChatContextType } from '../types';
 
@@ -13,6 +14,7 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const [apiService] = useState(() => new ApiService(context));
 
   // Load conversations on mount
@@ -157,12 +159,20 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
 
   return (
     <div className="flex h-screen bg-white">
+      {creditsOpen && (
+        <CreditsPanel
+          apiService={apiService}
+          onClose={() => setCreditsOpen(false)}
+        />
+      )}
+
       <ConversationList
         conversations={conversations}
         currentConversationId={currentConversation?.id}
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
         onDeleteConversation={handleDeleteConversation}
+        onOpenCredits={() => setCreditsOpen(true)}
       />
 
       <div className="flex flex-1 flex-col">

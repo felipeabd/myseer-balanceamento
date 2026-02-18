@@ -51,6 +51,9 @@ async function main() {
     res.json({ status: 'ok', service: 'iris-balanceamento' });
   });
 
+  // Ensure ClickHouse tables exist
+  await agent.getCreditsManager().ensureTable();
+
   // Mount IRIS routes
   app.use('/api/iris', createIrisRouter(agent));
 

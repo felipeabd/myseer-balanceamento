@@ -154,6 +154,21 @@ export function createIrisRouter(agent: IrisAgent): Router {
   });
 
   /**
+   * GET /credits
+   * Get credits info (contracted, used, available) + usage breakdown in BRL.
+   */
+  router.get('/credits', async (req: Request, res: Response) => {
+    try {
+      const creditsManager = agent.getCreditsManager();
+      const info = await creditsManager.getCreditsInfo(req.tenant!.tenantId);
+      res.json(info);
+    } catch (error) {
+      console.error('[Iris Balanceamento] Credits error:', error);
+      res.status(500).json({ error: 'Failed to retrieve credits info' });
+    }
+  });
+
+  /**
    * GET /metrics/conversation/:id
    * Get token usage for a specific conversation.
    */

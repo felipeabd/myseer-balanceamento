@@ -154,6 +154,17 @@ export class ApiService {
   }
 
   /**
+   * Get credits info (contracted, used, available) + usage breakdown in BRL
+   */
+  async getCredits(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/api/iris/credits`, {
+      headers: this.getHeaders(),
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  }
+
+  /**
    * Delete a conversation
    */
   async deleteConversation(conversationId: string): Promise<void> {

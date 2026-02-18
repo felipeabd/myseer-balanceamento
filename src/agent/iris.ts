@@ -5,6 +5,7 @@ import { agentTools } from './tools';
 import { ConversationManager } from '../conversation/manager';
 import { UsageTracker } from '../tracking/usage-tracker';
 import { ConversationLogger } from '../tracking/conversation-logger';
+import { CreditsManager } from '../tracking/credits-manager';
 import { SessionManager } from '../rules/session-manager';
 import { RuleTrainerAgent } from './rule-trainer';
 import { LoadRulesSkill } from '../rules/load-rules-skill';
@@ -30,6 +31,7 @@ export class IrisAgent {
   private maxToolCalls: number;
   private usageTracker: UsageTracker;
   private conversationLogger: ConversationLogger;
+  private creditsManager: CreditsManager;
   private sessionManager: SessionManager;
   private ruleTrainer: RuleTrainerAgent;
   private loadRulesSkill: LoadRulesSkill;
@@ -60,6 +62,7 @@ export class IrisAgent {
     this.maxToolCalls = config.maxToolCalls ?? 3;
     this.usageTracker = new UsageTracker(this.clickhouse);
     this.conversationLogger = new ConversationLogger(this.clickhouse);
+    this.creditsManager = new CreditsManager(this.clickhouse);
     this.sessionManager = new SessionManager(this.clickhouse);
     this.ruleTrainer = new RuleTrainerAgent(this.clickhouse, this.sessionManager, this.conversations);
     this.loadRulesSkill = new LoadRulesSkill(this.clickhouse);
@@ -80,6 +83,11 @@ export class IrisAgent {
   /** Get CSV store instance for download endpoint */
   getCsvStore(): CsvStore {
     return this.csvStore;
+  }
+
+  /** Get credits manager instance */
+  getCreditsManager(): CreditsManager {
+    return this.creditsManager;
   }
 
   /**
