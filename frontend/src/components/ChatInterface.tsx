@@ -169,6 +169,7 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
         <MessageList
           messages={currentConversation?.messages || []}
           isLoading={isLoading}
+          onStarterPrompt={handleSendMessage}
         />
         <MessageInput
           onSendMessage={handleSendMessage}

@@ -5,12 +5,60 @@ import type { Message } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3030';
 
+const STARTER_PROMPTS = [
+  {
+    icon: '⚠️',
+    title: 'Risco de ruptura',
+    prompt: 'Quais produtos estão em risco de ruptura nas filiais hoje?',
+  },
+  {
+    icon: '🔄',
+    title: 'Oportunidades de balanceamento',
+    prompt: 'Mostre as principais oportunidades de transferência de estoque entre filiais.',
+  },
+  {
+    icon: '📦',
+    title: 'Excesso redistributível',
+    prompt: 'Quais filiais têm excesso de estoque que pode ser transferido?',
+  },
+  {
+    icon: '💰',
+    title: 'Capital imobilizado',
+    prompt: 'Qual o capital imobilizado em produtos parados por mais de 90 dias?',
+  },
+];
+
+function MyseerLogo({ size = 56 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="ml-grad" x1="10" y1="10" x2="90" y2="90" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#28B8CE" />
+          <stop offset="50%" stopColor="#2A81B8" />
+          <stop offset="100%" stopColor="#494495" />
+        </linearGradient>
+      </defs>
+      <polygon points="50,4 91,27 91,73 50,96 9,73 9,27" fill="none" stroke="url(#ml-grad)" strokeWidth="2.5" />
+      <polygon points="50,22 73,35 73,65 50,78 27,65 27,35" fill="none" stroke="url(#ml-grad)" strokeWidth="1.5" />
+      <polygon points="50,36 63,43 63,57 50,64 37,57 37,43" fill="none" stroke="url(#ml-grad)" strokeWidth="1.2" />
+      <line x1="50" y1="50" x2="50" y2="4" stroke="url(#ml-grad)" strokeWidth="1.2" />
+      <line x1="50" y1="50" x2="91" y2="27" stroke="url(#ml-grad)" strokeWidth="1.2" />
+      <line x1="50" y1="50" x2="91" y2="73" stroke="url(#ml-grad)" strokeWidth="1.2" />
+      <line x1="50" y1="50" x2="50" y2="96" stroke="url(#ml-grad)" strokeWidth="1.2" />
+      <line x1="50" y1="50" x2="9" y2="73" stroke="url(#ml-grad)" strokeWidth="1.2" />
+      <line x1="50" y1="50" x2="9" y2="27" stroke="url(#ml-grad)" strokeWidth="1.2" />
+      <circle cx="50" cy="50" r="5" fill="url(#ml-grad)" />
+    </svg>
+  );
+}
+
 interface MessageListProps {
   messages: Message[];
   isLoading?: boolean;
+  onStarterPrompt?: (prompt: string) => void;
 }
 
-export function MessageList({ messages, isLoading }: MessageListProps) {
+export function MessageList({ messages, isLoading, onStarterPrompt }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -25,30 +73,57 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
     <div className="flex-1 overflow-y-auto bg-gray-50 p-4">
       <div className="mx-auto max-w-4xl space-y-4">
         {messages.length === 0 && !isLoading && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">💬</div>
-            <h2 className="text-2xl font-semibold text-gray-700 mb-2">
-              Olá! Sou a Iris Balanceamento
+          <div className="text-center py-10">
+            <div className="flex justify-center mb-4">
+              <MyseerLogo size={64} />
+            </div>
+            <h2 className="text-2xl font-bold mb-1" style={{ color: '#272154' }}>
+              Iris
             </h2>
-            <p className="text-gray-500">
-              Faça sua primeira pergunta sobre balanceamento de estoque
+            <p className="text-sm mb-8" style={{ color: '#2A81B8' }}>
+              Gestor de Estoque · Myseer
             </p>
+            <p className="text-gray-500 mb-6 text-sm">
+              Como posso ajudar com seu estoque hoje?
+            </p>
+
+            {/* Starter prompts grid */}
+            <div className="grid grid-cols-2 gap-3 max-w-xl mx-auto">
+              {STARTER_PROMPTS.map((item) => (
+                <button
+                  key={item.title}
+                  onClick={() => onStarterPrompt?.(item.prompt)}
+                  className="text-left rounded-xl border border-gray-200 bg-white p-4 hover:border-blue-300 hover:shadow-sm transition-all group"
+                >
+                  <div className="text-xl mb-2">{item.icon}</div>
+                  <p className="text-sm font-medium text-gray-700 group-hover:text-blue-700">
+                    {item.title}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1 line-clamp-2">
+                    {item.prompt}
+                  </p>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex ${
-              msg.role === 'user' ? 'justify-end' : 'justify-start'
-            }`}
+            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
               className={`rounded-lg px-4 py-3 ${
                 msg.role === 'user'
-                  ? 'max-w-[80%] bg-blue-600 text-white'
+                  ? 'max-w-[80%] text-white'
                   : 'max-w-[95%] bg-white border border-gray-200 text-gray-800'
               }`}
+              style={
+                msg.role === 'user'
+                  ? { background: 'linear-gradient(135deg, #2A81B8 0%, #494495 100%)' }
+                  : {}
+              }
             >
               {msg.role === 'assistant' ? (
                 <div className="prose prose-sm max-w-none overflow-x-auto">
@@ -107,9 +182,9 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
           <div className="flex justify-start">
             <div className="max-w-[80%] rounded-lg border border-gray-200 bg-white px-4 py-3">
               <div className="flex items-center gap-2">
-                <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]"></div>
-                <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]"></div>
-                <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
+                <div className="h-2 w-2 animate-bounce rounded-full [animation-delay:-0.3s]" style={{ backgroundColor: '#28B8CE' }}></div>
+                <div className="h-2 w-2 animate-bounce rounded-full [animation-delay:-0.15s]" style={{ backgroundColor: '#2A81B8' }}></div>
+                <div className="h-2 w-2 animate-bounce rounded-full" style={{ backgroundColor: '#494495' }}></div>
               </div>
             </div>
           </div>

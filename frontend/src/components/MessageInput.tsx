@@ -152,7 +152,7 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Digite sua pergunta sobre balanceamento..."
+          placeholder="Pergunte sobre estoque, rupturas, balanceamento..."
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -161,7 +161,8 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
         <button
           onClick={handleSend}
           disabled={(!message.trim() && imageFiles.length === 0) || disabled}
-          className="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+          className="rounded-lg px-6 py-3 font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+          style={(!message.trim() && imageFiles.length === 0) || disabled ? {} : { background: 'linear-gradient(135deg, #2A81B8 0%, #494495 100%)' }}
         >
           Enviar
         </button>
