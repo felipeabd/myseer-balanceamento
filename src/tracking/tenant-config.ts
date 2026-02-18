@@ -5,16 +5,16 @@ export const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 export const AVAILABLE_MODELS = [
   {
     id: 'claude-sonnet-4-5-20250929',
-    name: 'Claude Sonnet 4.5',
+    name: 'Avançado',
     provider: 'Anthropic',
-    description: 'Melhor qualidade de raciocínio. Recomendado para análises complexas.',
+    description: 'Maior poder de análise e geração de insights. Ideal para análises complexas.',
     badge: 'Recomendado',
   },
   {
     id: 'claude-haiku-4-5-20251001',
-    name: 'Claude Haiku 4.5',
+    name: 'Básico',
     provider: 'Anthropic',
-    description: 'Mais rápido e econômico. Ideal para consultas simples e rotineiras.',
+    description: 'Recomendado para ações simples, sem análises avançadas. Menor custo.',
     badge: 'Econômico',
   },
 ] as const;

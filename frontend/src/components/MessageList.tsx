@@ -5,38 +5,64 @@ import type { Message } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3030';
 
-const STARTER_PROMPTS = [
+const ESTOQUE_PROMPTS = [
   {
     icon: '⚠️',
     title: 'Risco de ruptura',
-    prompt: 'Quais produtos estão em risco de ruptura nas filiais hoje?',
+    prompt: 'Quais produtos estão com risco de ruptura nas próximas semanas?',
+  },
+  {
+    icon: '⚖️',
+    title: 'Oportunidades de balanceamento',
+    prompt: 'Quais produtos têm excesso em algumas filiais e falta em outras?',
   },
   {
     icon: '🔄',
-    title: 'Oportunidades de balanceamento',
-    prompt: 'Mostre as principais oportunidades de transferência de estoque entre filiais.',
-  },
-  {
-    icon: '📦',
     title: 'Excesso redistributível',
-    prompt: 'Quais filiais têm excesso de estoque que pode ser transferido?',
+    prompt: 'Quais filiais têm excesso de estoque que pode ser redistribuído?',
   },
   {
     icon: '💰',
     title: 'Capital imobilizado',
-    prompt: 'Qual o capital imobilizado em produtos parados por mais de 90 dias?',
+    prompt: 'Quais produtos estão imobilizando mais capital em excesso de estoque?',
   },
 ];
 
+const VENDAS_PROMPTS = [
+  {
+    icon: '📊',
+    title: 'Análise de Margem',
+    prompt: 'Quais produtos ou filiais estão com margem abaixo do esperado?',
+  },
+  {
+    icon: '📈',
+    title: 'Crescimento de Vendas',
+    prompt: 'Compare o faturamento atual com períodos anteriores por filial e por produto.',
+  },
+  {
+    icon: '🎯',
+    title: 'Atingimento de Metas',
+    prompt: 'Qual o percentual de meta atingida por filial e quais estão em risco de não bater?',
+  },
+  {
+    icon: '🔄',
+    title: 'Mix e Curva ABC',
+    prompt: 'Quais produtos da curva A estão perdendo participação no faturamento?',
+  },
+];
 
 interface MessageListProps {
   messages: Message[];
   isLoading?: boolean;
   onStarterPrompt?: (prompt: string) => void;
+  selectedAgent?: 'estoque' | 'vendas';
 }
 
-export function MessageList({ messages, isLoading, onStarterPrompt }: MessageListProps) {
+export function MessageList({ messages, isLoading, onStarterPrompt, selectedAgent = 'estoque' }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const starterPrompts = selectedAgent === 'vendas' ? VENDAS_PROMPTS : ESTOQUE_PROMPTS;
+  const agentLabel = selectedAgent === 'vendas' ? 'Iris · Gestor de Vendas' : 'Iris · Gestor de Estoque';
+  const agentSubtitle = selectedAgent === 'vendas' ? 'Como posso ajudar com suas vendas hoje?' : 'Como posso ajudar com seu estoque hoje?';
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -54,14 +80,14 @@ export function MessageList({ messages, isLoading, onStarterPrompt }: MessageLis
             <div className="flex justify-center mb-6">
               <img src="/myseer-logo-vertical.png" alt="Myseer" className="h-36 w-auto" />
             </div>
-            <p className="text-sm font-medium mb-1" style={{ color: '#272154' }}>Iris · Gestor de Estoque</p>
+            <p className="text-sm font-medium mb-1" style={{ color: '#272154' }}>{agentLabel}</p>
             <p className="text-gray-500 mb-6 text-sm">
-              Como posso ajudar com seu estoque hoje?
+              {agentSubtitle}
             </p>
 
             {/* Starter prompts grid */}
             <div className="grid grid-cols-2 gap-3 max-w-xl mx-auto">
-              {STARTER_PROMPTS.map((item) => (
+              {starterPrompts.map((item) => (
                 <button
                   key={item.title}
                   onClick={() => onStarterPrompt?.(item.prompt)}

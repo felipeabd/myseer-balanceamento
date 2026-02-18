@@ -203,6 +203,50 @@ export class ApiService {
   }
 
   /**
+   * Add credits to the tenant (accumulated into contracted_brl)
+   */
+  async addCredits(amountBrl: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/api/iris/credits/add`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ amountBrl }),
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  }
+
+  /**
+   * Get recharge invoices, optionally filtered by month (YYYY-MM)
+   */
+  async getInvoices(month?: string): Promise<Array<{ id: number; amountBrl: number; rechargedAt: string }>> {
+    const params = new URLSearchParams();
+    if (month) params.set('month', month);
+    const response = await fetch(`${API_BASE_URL}/api/iris/credits/invoices?${params.toString()}`, {
+      headers: this.getHeaders(),
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  }
+
+  /**
+   * Get drill-down credits detail filtered by date and/or user
+   */
+  async getCreditsDetail(date?: string, userEmail?: string, hour?: string): Promise<{
+    hourly: Array<{ hour: string; totalTokens: number; costBrl: number }>;
+    byUser: Array<{ userEmail: string; totalTokens: number; costBrl: number }>;
+  }> {
+    const params = new URLSearchParams();
+    if (date) params.set('date', date);
+    if (userEmail) params.set('user', userEmail);
+    if (hour) params.set('hour', hour);
+    const response = await fetch(`${API_BASE_URL}/api/iris/credits/detail?${params.toString()}`, {
+      headers: this.getHeaders(),
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  }
+
+  /**
    * Delete a conversation
    */
   async deleteConversation(conversationId: string): Promise<void> {

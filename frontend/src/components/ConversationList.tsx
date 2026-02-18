@@ -8,6 +8,8 @@ interface ConversationListProps {
   onDeleteConversation: (conversationId: string) => void;
   onOpenCredits: () => void;
   onOpenSettings: () => void;
+  selectedAgent: 'estoque' | 'vendas';
+  onSelectAgent: (agent: 'estoque' | 'vendas') => void;
 }
 
 export function ConversationList({
@@ -18,6 +20,8 @@ export function ConversationList({
   onDeleteConversation,
   onOpenCredits,
   onOpenSettings,
+  selectedAgent,
+  onSelectAgent,
 }: ConversationListProps) {
   return (
     <div className="w-64 border-r border-gray-200 flex flex-col" style={{ backgroundColor: '#f8f9fc' }}>
@@ -33,10 +37,15 @@ export function ConversationList({
           Agentes Myseer
         </p>
 
-        {/* Gestor de Estoque — active */}
+        {/* Gestor de Estoque */}
         <div
           className="flex items-center gap-2.5 rounded-lg px-2 py-2 cursor-pointer transition-all hover:shadow-sm hover:brightness-95 active:scale-[0.98]"
-          style={{ background: 'linear-gradient(135deg, #e8f7fa 0%, #eceaf8 100%)', borderLeft: '3px solid #2A81B8' }}
+          style={
+            selectedAgent === 'estoque'
+              ? { background: 'linear-gradient(135deg, #e8f7fa 0%, #eceaf8 100%)', borderLeft: '3px solid #2A81B8' }
+              : {}
+          }
+          onClick={() => onSelectAgent('estoque')}
         >
           <div
             className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
@@ -49,19 +58,25 @@ export function ConversationList({
           <span className="text-sm font-medium" style={{ color: '#272154' }}>Gestor de Estoque</span>
         </div>
 
-        {/* Gestor de Vendas — em breve */}
+        {/* Gestor de Vendas */}
         <div
-          className="flex items-center gap-2.5 rounded-lg px-2 py-2 opacity-50 cursor-not-allowed"
+          className="flex items-center gap-2.5 rounded-lg px-2 py-2 cursor-pointer transition-all hover:shadow-sm hover:brightness-95 active:scale-[0.98]"
+          style={
+            selectedAgent === 'vendas'
+              ? { background: 'linear-gradient(135deg, #e8f7fa 0%, #eceaf8 100%)', borderLeft: '3px solid #2A81B8' }
+              : {}
+          }
+          onClick={() => onSelectAgent('vendas')}
         >
-          <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 bg-gray-200">
-            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div
+            className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #28B8CE 0%, #494495 100%)' }}
+          >
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-sm font-medium text-gray-500">Gestor de Vendas</span>
-            <span className="text-[10px] text-gray-400">Em breve</span>
-          </div>
+          <span className="text-sm font-medium" style={{ color: '#272154' }}>Gestor de Vendas</span>
         </div>
 
         {/* Gestor de Mercado — em breve */}

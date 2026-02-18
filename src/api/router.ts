@@ -210,6 +210,25 @@ export function createIrisRouter(agent: IrisAgent): Router {
   });
 
   /**
+   * GET /credits/detail
+   * Drill-down: filtered hourly + byUser breakdown.
+   * Query params: date (YYYY-MM-DD), user (email)
+   */
+  router.get('/credits/detail', async (req: Request, res: Response) => {
+    try {
+      const creditsManager = agent.getCreditsManager();
+      const date = req.query.date as string | undefined;
+      const user = req.query.user as string | undefined;
+      const hour = req.query.hour as string | undefined;
+      const detail = await creditsManager.getCreditsDetail(req.tenant!.tenantId, date, user, hour);
+      res.json(detail);
+    } catch (error) {
+      console.error('[Iris Balanceamento] Credits detail error:', error);
+      res.status(500).json({ error: 'Failed to retrieve credits detail' });
+    }
+  });
+
+  /**
    * GET /metrics
    * Get token usage metrics for current tenant.
    */
@@ -232,6 +251,44 @@ export function createIrisRouter(agent: IrisAgent): Router {
     } catch (error) {
       console.error('[Iris Balanceamento] Metrics error:', error);
       res.status(500).json({ error: 'Failed to retrieve metrics' });
+    }
+  });
+
+  /**
+   * POST /credits/add
+   * Add credits to a tenant (accumulated into contracted_brl).
+   * Body: { amountBrl: number }
+   */
+  router.post('/credits/add', async (req: Request, res: Response) => {
+    try {
+      const { amountBrl } = req.body as { amountBrl: number };
+      if (!amountBrl || typeof amountBrl !== 'number' || amountBrl <= 0) {
+        res.status(400).json({ error: 'amountBrl deve ser um número positivo' });
+        return;
+      }
+      const creditsManager = agent.getCreditsManager();
+      await creditsManager.addCredits(req.tenant!.tenantId, amountBrl);
+      const info = await creditsManager.getCreditsInfo(req.tenant!.tenantId);
+      res.json(info);
+    } catch (error) {
+      console.error('[Iris Balanceamento] Credits add error:', error);
+      res.status(500).json({ error: 'Failed to add credits' });
+    }
+  });
+
+  /**
+   * GET /credits/invoices
+   * Get recharge history for the tenant, optionally filtered by month (YYYY-MM).
+   */
+  router.get('/credits/invoices', async (req: Request, res: Response) => {
+    try {
+      const creditsManager = agent.getCreditsManager();
+      const month = req.query.month as string | undefined;
+      const recharges = await creditsManager.getRecharges(req.tenant!.tenantId, month);
+      res.json(recharges);
+    } catch (error) {
+      console.error('[Iris Balanceamento] Credits invoices error:', error);
+      res.status(500).json({ error: 'Failed to retrieve invoices' });
     }
   });
 

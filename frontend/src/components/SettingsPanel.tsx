@@ -113,7 +113,6 @@ export function SettingsPanel({ apiService, onClose }: SettingsPanelProps) {
                           </span>
                         </div>
                         <p className="text-xs text-gray-500">{m.description}</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{m.provider}</p>
                       </div>
                       <div
                         className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5"

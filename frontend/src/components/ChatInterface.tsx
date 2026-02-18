@@ -17,6 +17,7 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<'estoque' | 'vendas'>('estoque');
   const [apiService] = useState(() => new ApiService(context));
 
   // Load conversations on mount
@@ -194,6 +195,8 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
         onDeleteConversation={handleDeleteConversation}
         onOpenCredits={() => setCreditsOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
+        selectedAgent={selectedAgent}
+        onSelectAgent={setSelectedAgent}
       />
 
       <div className="flex flex-1 flex-col">
@@ -201,6 +204,7 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
           messages={currentConversation?.messages || []}
           isLoading={isLoading}
           onStarterPrompt={handleSendMessage}
+          selectedAgent={selectedAgent}
         />
         <MessageInput
           onSendMessage={handleSendMessage}
