@@ -169,6 +169,29 @@ export class ApiService {
   }
 
   /**
+   * Get tenant config (current model + available models)
+   */
+  async getConfig(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/api/iris/config`, {
+      headers: this.getHeaders(),
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  }
+
+  /**
+   * Update tenant config (e.g. change model)
+   */
+  async updateConfig(modelId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/api/iris/config`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ modelId }),
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  /**
    * Get credits info (contracted, used, available) + usage breakdown in BRL
    */
   async getCredits(): Promise<any> {

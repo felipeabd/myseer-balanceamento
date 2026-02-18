@@ -6,6 +6,7 @@ import { ConversationManager } from '../conversation/manager';
 import { UsageTracker } from '../tracking/usage-tracker';
 import { ConversationLogger } from '../tracking/conversation-logger';
 import { CreditsManager } from '../tracking/credits-manager';
+import { TenantConfigManager } from '../tracking/tenant-config';
 import { SessionManager } from '../rules/session-manager';
 import { RuleTrainerAgent } from './rule-trainer';
 import { LoadRulesSkill } from '../rules/load-rules-skill';
@@ -32,6 +33,7 @@ export class IrisAgent {
   private usageTracker: UsageTracker;
   private conversationLogger: ConversationLogger;
   private creditsManager: CreditsManager;
+  private tenantConfigManager: TenantConfigManager;
   private sessionManager: SessionManager;
   private ruleTrainer: RuleTrainerAgent;
   private loadRulesSkill: LoadRulesSkill;
@@ -63,6 +65,7 @@ export class IrisAgent {
     this.usageTracker = new UsageTracker(this.clickhouse);
     this.conversationLogger = new ConversationLogger(this.clickhouse);
     this.creditsManager = new CreditsManager(this.clickhouse);
+    this.tenantConfigManager = new TenantConfigManager(this.clickhouse);
     this.sessionManager = new SessionManager(this.clickhouse);
     this.ruleTrainer = new RuleTrainerAgent(this.clickhouse, this.sessionManager, this.conversations);
     this.loadRulesSkill = new LoadRulesSkill(this.clickhouse);
@@ -93,6 +96,11 @@ export class IrisAgent {
   /** Get conversation manager instance */
   getConversationManager(): ConversationManager {
     return this.conversations;
+  }
+
+  /** Get tenant config manager instance */
+  getTenantConfigManager(): TenantConfigManager {
+    return this.tenantConfigManager;
   }
 
   /**
@@ -172,6 +180,9 @@ export class IrisAgent {
     const systemPrompt = buildSystemPrompt(tenant, this.rules) + rulesPrompt;
     const messages = this.buildAnthropicMessages(conv.messages);
 
+    // Resolve model for this tenant (configurable per tenant)
+    const model = await this.tenantConfigManager.getModel(tenant.tenantId);
+
     let toolCallCount = 0;
     let currentMessages = messages;
     let finalResponse = '';
@@ -184,7 +195,7 @@ export class IrisAgent {
     // Agentic loop: keep going while the model wants to use tools
     while (true) {
       const response = await this.anthropic.messages.create({
-        model: this.model,
+        model,
         max_tokens: 4096,
         temperature: 0.5,
         system: systemPrompt,
@@ -284,7 +295,7 @@ export class IrisAgent {
       tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
       conversationId: conv.id,
-      model: this.model,
+      model,
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
       endpoint: 'chat',
@@ -387,6 +398,9 @@ export class IrisAgent {
     const systemPrompt = buildSystemPrompt(tenant, this.rules) + rulesPrompt;
     const messages = this.buildAnthropicMessages(conv.messages);
 
+    // Resolve model for this tenant (configurable per tenant)
+    const model = await this.tenantConfigManager.getModel(tenant.tenantId);
+
     let toolCallCount = 0;
     let currentMessages = messages;
     let fullResponse = '';
@@ -400,7 +414,7 @@ export class IrisAgent {
       // Check if we still have tool budget — if yes, use non-streaming for tool loop
       if (toolCallCount < this.maxToolCalls) {
         const response = await this.anthropic.messages.create({
-          model: this.model,
+          model,
           max_tokens: 4096,
           temperature: 0.5,
           system: systemPrompt,
@@ -481,7 +495,7 @@ export class IrisAgent {
 
       // Final streaming response after tools exhausted
       const stream = this.anthropic.messages.stream({
-        model: this.model,
+        model,
         max_tokens: 4096,
         system: systemPrompt,
         messages: currentMessages,
@@ -514,7 +528,7 @@ export class IrisAgent {
       tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
       conversationId: conv.id,
-      model: this.model,
+      model,
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
       endpoint: 'stream',

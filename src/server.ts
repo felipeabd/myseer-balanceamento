@@ -53,6 +53,7 @@ async function main() {
 
   // Ensure ClickHouse tables exist
   await agent.getCreditsManager().ensureTable();
+  await agent.getTenantConfigManager().ensureTable();
 
   // Mount IRIS routes
   app.use('/api/iris', createIrisRouter(agent));

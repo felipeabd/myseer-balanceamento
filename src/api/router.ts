@@ -177,6 +177,39 @@ export function createIrisRouter(agent: IrisAgent): Router {
   });
 
   /**
+   * GET /config
+   * Get tenant configuration (current model + available models).
+   */
+  router.get('/config', async (req: Request, res: Response) => {
+    try {
+      const config = await agent.getTenantConfigManager().getConfig(req.tenant!.tenantId);
+      res.json(config);
+    } catch (error) {
+      console.error('[Iris] Config GET error:', error);
+      res.status(500).json({ error: 'Failed to retrieve config' });
+    }
+  });
+
+  /**
+   * PUT /config
+   * Update tenant configuration (e.g. change model).
+   */
+  router.put('/config', async (req: Request, res: Response) => {
+    try {
+      const { modelId } = req.body as { modelId: string };
+      if (!modelId) {
+        res.status(400).json({ error: 'modelId é obrigatório' });
+        return;
+      }
+      await agent.getTenantConfigManager().setModel(req.tenant!.tenantId, modelId);
+      res.json({ modelId });
+    } catch (error: any) {
+      console.error('[Iris] Config PUT error:', error);
+      res.status(400).json({ error: error.message ?? 'Failed to update config' });
+    }
+  });
+
+  /**
    * GET /metrics
    * Get token usage metrics for current tenant.
    */
