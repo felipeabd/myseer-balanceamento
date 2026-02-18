@@ -4,6 +4,7 @@ import { MessageInput, type ImageData } from './MessageInput';
 import { ConversationList } from './ConversationList';
 import { CreditsPanel } from './CreditsPanel';
 import { SettingsPanel } from './SettingsPanel';
+import { SummaryPanel } from './SummaryPanel';
 import { ApiService } from '../services/api';
 import type { Message, Conversation, ChatContextType } from '../types';
 
@@ -17,7 +18,8 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<'estoque' | 'vendas'>('estoque');
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<'estoque' | 'vendas' | 'prevencao'>('estoque');
   const [apiService] = useState(() => new ApiService(context));
 
   // Load conversations on mount
@@ -186,6 +188,9 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
           onClose={() => setSettingsOpen(false)}
         />
       )}
+      {summaryOpen && (
+        <SummaryPanel onClose={() => setSummaryOpen(false)} />
+      )}
 
       <ConversationList
         conversations={conversations}
@@ -195,6 +200,7 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
         onDeleteConversation={handleDeleteConversation}
         onOpenCredits={() => setCreditsOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSummary={() => setSummaryOpen(true)}
         selectedAgent={selectedAgent}
         onSelectAgent={setSelectedAgent}
       />
@@ -209,6 +215,7 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
         <MessageInput
           onSendMessage={handleSendMessage}
           disabled={isLoading}
+          selectedAgent={selectedAgent}
         />
       </div>
     </div>

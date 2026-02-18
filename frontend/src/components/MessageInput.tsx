@@ -8,9 +8,10 @@ export interface ImageData {
 interface MessageInputProps {
   onSendMessage: (message: string, images?: ImageData[]) => void;
   disabled?: boolean;
+  selectedAgent?: 'estoque' | 'vendas' | 'prevencao';
 }
 
-export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
+export function MessageInput({ onSendMessage, disabled, selectedAgent = 'estoque' }: MessageInputProps) {
   const [message, setMessage] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -168,7 +169,7 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="Pergunte sobre estoque, rupturas, balanceamento..."
+          placeholder={selectedAgent === 'vendas' ? 'Pergunte sobre vendas, margem, metas...' : selectedAgent === 'prevencao' ? 'Pergunte sobre vencidos, avarias, estoque negativo...' : 'Pergunte sobre estoque, rupturas, balanceamento...'}
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none bg-transparent text-sm text-gray-800 placeholder-gray-400 focus:outline-none disabled:cursor-not-allowed"
@@ -199,7 +200,7 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
       </div>
 
       <p className="mt-1.5 text-xs text-gray-400 text-center">
-        Enter para enviar · Shift+Enter para nova linha
+        A Iris é uma IA e pode cometer erros · Por favor verifique as respostas
       </p>
     </div>
   );

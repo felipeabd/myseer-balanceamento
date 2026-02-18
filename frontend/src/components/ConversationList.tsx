@@ -8,8 +8,9 @@ interface ConversationListProps {
   onDeleteConversation: (conversationId: string) => void;
   onOpenCredits: () => void;
   onOpenSettings: () => void;
-  selectedAgent: 'estoque' | 'vendas';
-  onSelectAgent: (agent: 'estoque' | 'vendas') => void;
+  onOpenSummary: () => void;
+  selectedAgent: 'estoque' | 'vendas' | 'prevencao';
+  onSelectAgent: (agent: 'estoque' | 'vendas' | 'prevencao') => void;
 }
 
 export function ConversationList({
@@ -20,6 +21,7 @@ export function ConversationList({
   onDeleteConversation,
   onOpenCredits,
   onOpenSettings,
+  onOpenSummary,
   selectedAgent,
   onSelectAgent,
 }: ConversationListProps) {
@@ -77,6 +79,27 @@ export function ConversationList({
             </svg>
           </div>
           <span className="text-sm font-medium" style={{ color: '#272154' }}>Gestor de Vendas</span>
+        </div>
+
+        {/* Gestor de Prevenção */}
+        <div
+          className="flex items-center gap-2.5 rounded-lg px-2 py-2 cursor-pointer transition-all hover:shadow-sm hover:brightness-95 active:scale-[0.98]"
+          style={
+            selectedAgent === 'prevencao'
+              ? { background: 'linear-gradient(135deg, #e8f7fa 0%, #eceaf8 100%)', borderLeft: '3px solid #2A81B8' }
+              : {}
+          }
+          onClick={() => onSelectAgent('prevencao')}
+        >
+          <div
+            className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #28B8CE 0%, #494495 100%)' }}
+          >
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+          <span className="text-sm font-medium" style={{ color: '#272154' }}>Gestor de Prevenção</span>
         </div>
 
         {/* Gestor de Mercado — em breve */}
@@ -167,6 +190,15 @@ export function ConversationList({
 
       {/* Footer */}
       <div className="border-t border-gray-200 bg-white px-3 py-2.5 space-y-2">
+        <button
+          onClick={onOpenSummary}
+          className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+        >
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          <span className="font-medium">Guia de Uso</span>
+        </button>
         <div className="flex gap-1">
           <button
             onClick={onOpenCredits}

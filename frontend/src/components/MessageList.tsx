@@ -8,46 +8,69 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3030';
 const ESTOQUE_PROMPTS = [
   {
     icon: '⚠️',
-    title: 'Risco de ruptura',
+    title: 'Risco de Ruptura',
     prompt: 'Quais produtos estão com risco de ruptura nas próximas semanas?',
   },
   {
     icon: '⚖️',
-    title: 'Oportunidades de balanceamento',
+    title: 'Oportunidade de Balanceamento',
     prompt: 'Quais produtos têm excesso em algumas filiais e falta em outras?',
   },
   {
-    icon: '🔄',
-    title: 'Excesso redistributível',
-    prompt: 'Quais filiais têm excesso de estoque que pode ser redistribuído?',
+    icon: '📉',
+    title: 'MAPE',
+    prompt: 'Quais produtos têm maior erro entre previsão e demanda real? Mostre por filial os itens com pior precisão de forecast.',
   },
   {
     icon: '💰',
-    title: 'Capital imobilizado',
+    title: 'Capital Imobilizado',
     prompt: 'Quais produtos estão imobilizando mais capital em excesso de estoque?',
+  },
+];
+
+const PREVENCAO_PROMPTS = [
+  {
+    icon: '📅',
+    title: 'Vencidos',
+    prompt: 'Quais produtos com validade vencida ainda constam em estoque? Mostre por filial e valor estimado de prejuízo.',
+  },
+  {
+    icon: '⏳',
+    title: 'Prevencidos',
+    prompt: 'Quais produtos estão próximos ao vencimento e precisam de ação urgente? Mostre dias restantes e quantidades por filial.',
+  },
+  {
+    icon: '🔻',
+    title: 'Estoque Negativo',
+    prompt: 'Quais produtos apresentam quantidade negativa no sistema?',
+  },
+  {
+    icon: '💥',
+    title: 'Avaria',
+    prompt: 'Quais produtos registraram avaria ou perda? Mostre o impacto por filial e o valor total de perdas.',
   },
 ];
 
 const VENDAS_PROMPTS = [
   {
     icon: '📊',
-    title: 'Análise de Margem',
+    title: 'Margem',
     prompt: 'Quais produtos ou filiais estão com margem abaixo do esperado?',
   },
   {
+    icon: '🛒',
+    title: 'Carrinho de Compras',
+    prompt: 'Quais produtos são vendidos juntos com mais frequência em um mesmo cupom? Mostre as principais combinações por filial.',
+  },
+  {
     icon: '📈',
-    title: 'Crescimento de Vendas',
-    prompt: 'Compare o faturamento atual com períodos anteriores por filial e por produto.',
+    title: 'EPD',
+    prompt: 'Analise a elasticidade, preço e demanda dos principais produtos: como variações de preço impactam o volume vendido?',
   },
   {
     icon: '🎯',
-    title: 'Atingimento de Metas',
+    title: 'Metas',
     prompt: 'Qual o percentual de meta atingida por filial e quais estão em risco de não bater?',
-  },
-  {
-    icon: '🔄',
-    title: 'Mix e Curva ABC',
-    prompt: 'Quais produtos da curva A estão perdendo participação no faturamento?',
   },
 ];
 
@@ -55,14 +78,14 @@ interface MessageListProps {
   messages: Message[];
   isLoading?: boolean;
   onStarterPrompt?: (prompt: string) => void;
-  selectedAgent?: 'estoque' | 'vendas';
+  selectedAgent?: 'estoque' | 'vendas' | 'prevencao';
 }
 
 export function MessageList({ messages, isLoading, onStarterPrompt, selectedAgent = 'estoque' }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const starterPrompts = selectedAgent === 'vendas' ? VENDAS_PROMPTS : ESTOQUE_PROMPTS;
-  const agentLabel = selectedAgent === 'vendas' ? 'Iris · Gestor de Vendas' : 'Iris · Gestor de Estoque';
-  const agentSubtitle = selectedAgent === 'vendas' ? 'Como posso ajudar com suas vendas hoje?' : 'Como posso ajudar com seu estoque hoje?';
+  const starterPrompts = selectedAgent === 'vendas' ? VENDAS_PROMPTS : selectedAgent === 'prevencao' ? PREVENCAO_PROMPTS : ESTOQUE_PROMPTS;
+  const agentLabel = selectedAgent === 'vendas' ? 'Iris · Gestor de Vendas' : selectedAgent === 'prevencao' ? 'Iris · Gestor de Prevenção' : 'Iris · Gestor de Estoque';
+  const agentSubtitle = selectedAgent === 'vendas' ? 'Como posso ajudar com suas vendas hoje?' : selectedAgent === 'prevencao' ? 'Como posso ajudar com a prevenção de perdas hoje?' : 'Como posso ajudar com seu estoque hoje?';
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -86,12 +109,12 @@ export function MessageList({ messages, isLoading, onStarterPrompt, selectedAgen
             </p>
 
             {/* Starter prompts grid */}
-            <div className="grid grid-cols-2 gap-3 max-w-xl mx-auto">
+            <div className="grid grid-cols-2 gap-3 max-w-xl mx-auto overflow-visible">
               {starterPrompts.map((item) => (
                 <button
                   key={item.title}
                   onClick={() => onStarterPrompt?.(item.prompt)}
-                  className="text-left rounded-xl border border-gray-200 bg-white p-4 hover:border-blue-300 hover:shadow-sm transition-all group"
+                  className="relative text-left rounded-xl border border-gray-200 bg-white p-4 hover:border-blue-300 hover:shadow-sm transition-all group"
                 >
                   <div className="text-xl mb-2">{item.icon}</div>
                   <p className="text-sm font-medium text-gray-700 group-hover:text-blue-700">
@@ -100,6 +123,11 @@ export function MessageList({ messages, isLoading, onStarterPrompt, selectedAgen
                   <p className="text-xs text-gray-400 mt-1 line-clamp-2">
                     {item.prompt}
                   </p>
+                  {/* Tooltip com texto completo */}
+                  <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 rounded-lg bg-gray-800 px-3 py-2 text-xs text-white shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                    {item.prompt}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+                  </div>
                 </button>
               ))}
             </div>
