@@ -31,7 +31,7 @@ export function ConversationList({
 
         {/* Gestor de Estoque — always active (only agent for now) */}
         <div
-          className="flex items-center gap-2.5 rounded-lg px-2 py-2 cursor-default"
+          className="flex items-center gap-2.5 rounded-lg px-2 py-2 cursor-pointer transition-all hover:shadow-sm hover:brightness-95 active:scale-[0.98]"
           style={{ background: 'linear-gradient(135deg, #e8f7fa 0%, #eceaf8 100%)', borderLeft: '3px solid #2A81B8' }}
         >
           <div
