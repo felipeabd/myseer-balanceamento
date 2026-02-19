@@ -197,7 +197,7 @@ export class IrisAgent {
       const response = await this.anthropic.messages.create({
         model,
         max_tokens: 4096,
-        temperature: 0.5,
+        temperature: 0.2,
         system: systemPrompt,
         tools: agentTools,
         messages: currentMessages,
@@ -416,7 +416,7 @@ export class IrisAgent {
         const response = await this.anthropic.messages.create({
           model,
           max_tokens: 4096,
-          temperature: 0.5,
+          temperature: 0.2,
           system: systemPrompt,
           tools: agentTools,
           messages: currentMessages,

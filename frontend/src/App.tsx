@@ -3,7 +3,7 @@ import './index.css';
 
 // TODO: Replace with actual tenant/user context from your auth system
 const mockContext = {
-  tenantId: '171D7479-A8DF-4A2A-91C3-8E8759C7F093',
+  tenantId: '7489598B-A6AC-4AB3-B1BB-5221DBC8EAB5',
   userEmail: 'demo@myseer.com.br',
 };
 
