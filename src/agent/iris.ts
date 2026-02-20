@@ -568,6 +568,7 @@ export class IrisAgent {
 
       const rows = await this.clickhouse.query(sql, tenant);
       console.log('[Iris Tool] Result rows:', Array.isArray(rows) ? rows.length : 0);
+      console.log('[Iris Tool] Result data:', JSON.stringify(rows.slice(0, 10), null, 2));
 
       // Auto-truncate large results to prevent context overflow
       if (rows.length > 100) {
