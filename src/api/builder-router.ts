@@ -347,6 +347,47 @@ export function createBuilderRouter(agent: IrisAgent): Router {
   // ── Rules Management ────────────────────────────────────
 
   /**
+   * POST /rules
+   * Create a new business rule.
+   * Body: { tenant, tipo, prioridade, texto, alvo?, condicao?, acao? }
+   */
+  router.post('/rules', async (req: Request, res: Response) => {
+    try {
+      const { tenant, tipo, prioridade, texto, alvo, condicao, acao } = req.body as {
+        tenant: string;
+        tipo: string;
+        prioridade: number;
+        texto: string;
+        alvo?: string;
+        condicao?: string;
+        acao?: string;
+      };
+
+      if (!tenant || !tipo || !prioridade || !texto) {
+        res.status(400).json({ error: 'tenant, tipo, prioridade e texto são obrigatórios' });
+        return;
+      }
+
+      const rulesManager = agent.getRulesManager();
+      await rulesManager.createRule({
+        tenant,
+        tipo,
+        prioridade: Number(prioridade),
+        texto,
+        alvo,
+        condicao,
+        acao,
+        criadoPor: (req.headers['x-user-email'] as string) || 'builder',
+      });
+
+      res.status(201).json({ ok: true });
+    } catch (error) {
+      console.error('[Builder] Create rule error:', error);
+      res.status(500).json({ error: 'Failed to create rule' });
+    }
+  });
+
+  /**
    * GET /rules?tenant=&tipo=&status=
    * List business rules with optional filters.
    */

@@ -226,6 +226,26 @@ export class BuilderApiService {
     return res.json();
   }
 
+  async createRule(data: {
+    tenant: string;
+    tipo: string;
+    prioridade: number;
+    texto: string;
+    alvo?: string;
+    condicao?: string;
+    acao?: string;
+  }): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/builder/rules`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || `HTTP ${res.status}`);
+    }
+  }
+
   async toggleRuleStatus(id: string, status: 'ativo' | 'inativo'): Promise<void> {
     const res = await fetch(`${API_BASE_URL}/api/builder/rules/${id}/toggle`, {
       method: 'PUT',

@@ -101,6 +101,39 @@ export class RulesManager {
   }
 
   /**
+   * Create a new rule.
+   */
+  async createRule(data: {
+    tenant: string;
+    tipo: string;
+    prioridade: number;
+    texto: string;
+    alvo?: string;
+    condicao?: string;
+    acao?: string;
+    criadoPor: string;
+  }): Promise<void> {
+    await this.clickhouse.execute(`
+      INSERT INTO ia_regras_balanceamento
+        (tenant, escopo, tipo, status, prioridade, alvo, condicao, acao, texto, criado_por, criado_em, atualizado_em)
+      VALUES (
+        '${esc(data.tenant)}',
+        'balanceamento',
+        '${esc(data.tipo)}',
+        'ativo',
+        ${data.prioridade},
+        '${esc(data.alvo ?? '')}',
+        '${esc(data.condicao ?? '')}',
+        '${esc(data.acao ?? '')}',
+        '${esc(data.texto)}',
+        '${esc(data.criadoPor)}',
+        now(),
+        now()
+      )
+    `);
+  }
+
+  /**
    * Permanently delete a rule.
    */
   async deleteRule(id: string): Promise<void> {
