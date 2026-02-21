@@ -108,6 +108,23 @@ export interface RuleRecord {
   vezesAplicada: number;
 }
 
+export interface TraceRecord {
+  messageId: string;
+  conversationId: string;
+  timestamp: string;
+  userQuestion: string;
+  responseSummary: string;
+  responseType: string;
+  toolsUsed: string[];
+  sqlQueries: string[];
+  hasError: boolean;
+  responseTimeMs: number;
+  tenantId: string;
+  userEmail: string;
+  rating: 1 | -1 | 0;
+  feedbackText: string;
+}
+
 export class BuilderApiService {
   private userEmail: string;
 
@@ -265,6 +282,16 @@ export class BuilderApiService {
   }
 
   // ── Analytics ───────────────────────────────────────────
+
+  async getAgentTraces(id: string, days: number = 30, limit: number = 100): Promise<TraceRecord[]> {
+    const res = await fetch(
+      `${API_BASE_URL}/api/builder/agents/${id}/traces?days=${days}&limit=${limit}`,
+      { headers: this.getHeaders() }
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.traces;
+  }
 
   async getAgentAnalytics(id: string, days: number = 30): Promise<AgentAnalytics> {
     const res = await fetch(`${API_BASE_URL}/api/builder/agents/${id}/analytics?days=${days}`, {

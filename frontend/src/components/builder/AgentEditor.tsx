@@ -4,6 +4,7 @@ import { TestChat } from './TestChat';
 import { TableSelector } from './TableSelector';
 import { StarterPromptsEditor } from './StarterPromptsEditor';
 import { Analytics } from './Analytics';
+import { Traces } from './Traces';
 
 interface AgentEditorProps {
   agent: AgentDefinitionFull;
@@ -14,7 +15,7 @@ interface AgentEditorProps {
   onRollback: (id: string, versao: number) => Promise<AgentDefinitionFull>;
 }
 
-type Tab = 'basico' | 'prompt' | 'tabelas' | 'skills' | 'regras' | 'conhecimento' | 'perguntas' | 'config' | 'historico' | 'teste' | 'analytics';
+type Tab = 'basico' | 'prompt' | 'tabelas' | 'skills' | 'regras' | 'conhecimento' | 'perguntas' | 'config' | 'historico' | 'teste' | 'analytics' | 'traces';
 
 export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRollback }: AgentEditorProps) {
   const [tab, setTab] = useState<Tab>('basico');
@@ -97,6 +98,7 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
     { key: 'historico', label: 'Historico' },
     { key: 'teste', label: 'Testar' },
     { key: 'analytics', label: 'Analytics' },
+    { key: 'traces', label: 'Traces' },
   ];
 
   const statusBadge = agent.status === 'publicado'
@@ -166,8 +168,13 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
         ))}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+      {/* Content — Traces tab gets full-width split-pane layout */}
+      {tab === 'traces' && (
+        <div className="flex-1 overflow-hidden">
+          <Traces agentId={agent.id} api={api} />
+        </div>
+      )}
+      <div className={`flex-1 overflow-y-auto bg-gray-50 p-6 ${tab === 'traces' ? 'hidden' : ''}`}>
         <div className="max-w-3xl mx-auto space-y-4">
           {tab === 'basico' && (
             <>

@@ -1,6 +1,23 @@
 import { ClickHouseService } from '../clickhouse/client';
 import { v4 as uuidv4 } from 'uuid';
 
+export interface TraceRow {
+  messageId: string;
+  conversationId: string;
+  timestamp: string;
+  userQuestion: string;
+  responseSummary: string;
+  responseType: string;
+  toolsUsed: string[];
+  sqlQueries: string[];
+  hasError: boolean;
+  responseTimeMs: number;
+  tenantId: string;
+  userEmail: string;
+  rating: 1 | -1 | 0;
+  feedbackText: string;
+}
+
 export interface ConversationLog {
   agent: string;
   tenantId: string;
@@ -291,6 +308,68 @@ export class ConversationLogger {
       LIMIT 50
     `;
     return await this.clickhouse.query(sql, { tenantId: '', userEmail: '' });
+  }
+
+  /**
+   * Get recent interaction traces for an agent (for Builder Trace Viewer)
+   */
+  async getAgentTraces(agentSlug: string, days: number = 30, limit: number = 100): Promise<TraceRow[]> {
+    const escape = (s: string) => s.replace(/'/g, "\\'");
+
+    const logs = await this.clickhouse.query(`
+      SELECT message_id, conversation_id, timestamp, user_question, response_summary,
+             response_type, tools_used, sql_queries, has_error, response_time_ms,
+             tenant_id, user_email
+      FROM ia_agents_log
+      WHERE agent = '${escape(agentSlug)}'
+        AND date >= today() - INTERVAL ${days} DAY
+      ORDER BY timestamp DESC
+      LIMIT ${limit}
+    `, { tenantId: '', userEmail: '' });
+
+    if (logs.length === 0) return [];
+
+    // Fetch feedback for these message ids
+    const msgIds = logs.map((r: Record<string, unknown>) => `'${r.message_id}'`).join(',');
+    const feedbacks = await this.clickhouse.query(`
+      SELECT message_id, rating, feedback_text
+      FROM ia_feedback FINAL
+      WHERE message_id IN (${msgIds})
+    `, { tenantId: '', userEmail: '' });
+
+    const feedbackMap = new Map<string, { rating: number; feedback_text: string }>(
+      feedbacks.map((f: Record<string, unknown>) => [
+        f.message_id as string,
+        { rating: Number(f.rating), feedback_text: (f.feedback_text as string) || '' },
+      ])
+    );
+
+    return logs.map((r: Record<string, unknown>) => {
+      const safeArray = (v: unknown): string[] => {
+        if (Array.isArray(v)) return v as string[];
+        if (typeof v === 'string' && v.startsWith('[')) {
+          try { return JSON.parse(v); } catch { return []; }
+        }
+        return [];
+      };
+      const fb = feedbackMap.get(r.message_id as string);
+      return {
+        messageId: r.message_id as string,
+        conversationId: r.conversation_id as string,
+        timestamp: String(r.timestamp),
+        userQuestion: (r.user_question as string) || '',
+        responseSummary: (r.response_summary as string) || '',
+        responseType: (r.response_type as string) || 'other',
+        toolsUsed: safeArray(r.tools_used),
+        sqlQueries: safeArray(r.sql_queries),
+        hasError: Number(r.has_error) === 1,
+        responseTimeMs: Number(r.response_time_ms) || 0,
+        tenantId: (r.tenant_id as string) || '',
+        userEmail: (r.user_email as string) || '',
+        rating: fb ? (fb.rating as 1 | -1 | 0) : 0,
+        feedbackText: fb ? fb.feedback_text : '',
+      };
+    });
   }
 
   /**

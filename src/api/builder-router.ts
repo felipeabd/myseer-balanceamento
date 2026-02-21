@@ -344,6 +344,31 @@ export function createBuilderRouter(agent: IrisAgent): Router {
     }
   });
 
+  // ── Traces ──────────────────────────────────────────────
+
+  /**
+   * GET /agents/:id/traces?days=30&limit=100
+   * Returns recent interaction traces for the Trace Viewer.
+   */
+  router.get('/agents/:id/traces', async (req: Request, res: Response) => {
+    try {
+      const days = parseInt((req.query.days as string) ?? '30', 10);
+      const limit = Math.min(parseInt((req.query.limit as string) ?? '100', 10), 500);
+      const registry = agent.getAgentRegistry();
+      const agentDef = await registry.getAgentById(req.params.id as string);
+      if (!agentDef) {
+        res.status(404).json({ error: 'Agent not found' });
+        return;
+      }
+      const logger = agent.getConversationLogger();
+      const traces = await logger.getAgentTraces(agentDef.slug, days, limit);
+      res.json({ traces });
+    } catch (error) {
+      console.error('[Builder] Traces error:', error);
+      res.status(500).json({ error: 'Failed to get traces' });
+    }
+  });
+
   // ── Rules Management ────────────────────────────────────
 
   /**
