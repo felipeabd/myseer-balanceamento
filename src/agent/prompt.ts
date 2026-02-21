@@ -1,10 +1,117 @@
-import { BalancingRule, TenantContext } from '../types';
+import { BalancingRule, TenantContext, AgentDefinition, AgentTableConfig } from '../types';
+
+// ── Dynamic System Prompt (config-driven) ────────────────────
 
 /**
- * Builds the system prompt for IRIS agent.
- * Receives the tenant context and optional business rules.
+ * Builds a system prompt dynamically from an AgentDefinition.
+ * Used by the framework for all agents (including estoque when loaded from DB).
  */
-export function buildSystemPrompt(
+export function buildDynamicSystemPrompt(
+  agent: AgentDefinition,
+  tenant: TenantContext,
+  rulesPrompt: string = ''
+): string {
+  const sections: string[] = [];
+
+  // Title
+  sections.push(`# ${agent.nome} — AGENTE DE IA MYSEER`);
+
+  // Personalidade
+  if (agent.prompt.personalidade) {
+    sections.push(`## PERSONALIDADE\n${agent.prompt.personalidade}`);
+  }
+
+  // Tom de comunicação
+  if (agent.prompt.tom) {
+    sections.push(`## TOM DE COMUNICAÇÃO\n${agent.prompt.tom}`);
+  }
+
+  // Restrições
+  if (agent.prompt.restricoes) {
+    sections.push(`## RESTRIÇÕES\n${agent.prompt.restricoes}`);
+  }
+
+  // Contexto do tenant
+  sections.push(`## CONTEXTO\n- Tenant: ${tenant.tenantId}\n- Usuário: ${tenant.userEmail}`);
+
+  // Tabelas disponíveis
+  if (agent.tabelas.length > 0) {
+    sections.push(`## TABELAS DISPONÍVEIS\n${buildTableSchema(agent.tabelas, tenant)}`);
+  }
+
+  // Regras de análise (guias do especialista)
+  if (agent.regraAnalise) {
+    sections.push(`## REGRAS DE ANÁLISE\n${agent.regraAnalise}`);
+  }
+
+  // Conhecimento base do agente (definido pelo especialista)
+  if (agent.conhecimento) {
+    sections.push(`## CONHECIMENTO\n${agent.conhecimento}`);
+  }
+
+  // Regras dinâmicas do banco (injetadas pelo loadRulesSkill)
+  if (rulesPrompt) {
+    sections.push(rulesPrompt);
+  }
+
+  // Fluxo de funcionamento
+  if (agent.prompt.fluxo) {
+    sections.push(`## FLUXO DE FUNCIONAMENTO\n${agent.prompt.fluxo}`);
+  }
+
+  // Exemplos de resposta
+  if (agent.prompt.exemplos) {
+    sections.push(`## EXEMPLOS DE RESPOSTA\n${agent.prompt.exemplos}`);
+  }
+
+  // Formato padrão (sempre presente)
+  sections.push(`## FORMATO DE RESPOSTA
+- Linguagem de negócio (nunca termos técnicos de banco de dados)
+- Conciso e objetivo
+- Diagnóstico sempre antes da recomendação
+- Se houver erro técnico, responda APENAS:
+  "Problemas técnicos impediram a geração desta análise no momento. Tente novamente mais tarde."
+- Nunca exponha nomes de tabelas, colunas ou mensagens de erro ao usuário
+- Nunca invente dados não sustentados pela análise`);
+
+  // CSV (se skill habilitada)
+  if (agent.skills.gerar_csv) {
+    sections.push(`## EXPORTAÇÃO CSV
+Quando o usuário pedir para exportar dados como CSV, planilha, Excel ou download:
+1. Use os dados já obtidos (NÃO faça nova consulta apenas para o CSV)
+2. Chame generate_csv com as colunas na ordem que o usuário pediu
+3. Inclua o link de download na resposta como: [Baixar CSV](url_retornada_pela_tool)
+
+**Quando oferecer CSV proativamente** (sem o usuário pedir):
+- Resultado com muitos itens para ação de terceiros
+- Nunca oferecer em: diagnóstico de item único, respostas exploratórias, listas com menos de 5 itens`);
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Builds table schema documentation from agent config.
+ * Generates a description of each table with its columns and mandatory filters.
+ */
+function buildTableSchema(tabelas: AgentTableConfig[], tenant: TenantContext): string {
+  return tabelas.map(t => {
+    const filtro = t.filtroObrigatorio
+      ? t.filtroObrigatorio.replace('{tenantId}', tenant.tenantId)
+      : '';
+
+    return `### ${t.alias} (\`${t.tabela}\`)
+Colunas: ${t.colunas.join(', ')}${filtro ? `\nFiltro obrigatório: ${filtro}` : ''}`;
+  }).join('\n\n');
+}
+
+// ── Legacy System Prompt (hardcoded for estoque agent) ───────
+
+/**
+ * Legacy system prompt for the estoque agent.
+ * Will be deprecated once the estoque agent is fully migrated to the database.
+ */
+export function buildSystemPromptLegacy(
   tenant: TenantContext,
   rules: BalancingRule[] = []
 ): string {
@@ -424,3 +531,11 @@ function formatRules(rules: BalancingRule[]): string {
     .map(r => `[${r.type}] Prioridade ${r.priority}: ${r.description}`)
     .join('\n');
 }
+
+// ── Backwards Compatibility ──────────────────────────────────
+
+/**
+ * Original buildSystemPrompt — delegates to legacy for backwards compatibility.
+ * Will be removed once all agents are loaded from the database.
+ */
+export const buildSystemPrompt = buildSystemPromptLegacy;

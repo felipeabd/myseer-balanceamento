@@ -1,7 +1,7 @@
 {
-  "name": "@myseer/balanceamento",
+  "name": "@myseer/iris",
   "version": "0.1.0",
-  "description": "IRIS - Agente de IA para balanceamento de estoque entre lojas",
+  "description": "IRIS - Agente de IA para análise e gestão de estoque entre lojas",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -15,10 +15,12 @@
     "setup:tracking": "tsx scripts/setup-usage-tracking.ts",
     "setup:logging": "tsx scripts/setup-agents-log.ts",
     "setup:rules": "tsx scripts/setup-rules-system.ts",
-    "setup:knowledge": "tsx scripts/setup-knowledge-base.ts"
+    "setup:knowledge": "tsx scripts/setup-knowledge-base.ts",
+    "setup:agents": "tsx scripts/setup-agents-table.ts",
+    "seed:estoque": "tsx scripts/seed-estoque-agent.ts"
   },
   "keywords": [
-    "balanceamento",
+    "iris",
     "estoque",
     "ia",
     "clickhouse",

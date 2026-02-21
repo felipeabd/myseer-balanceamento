@@ -1,91 +1,22 @@
 import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { Message } from '../types';
+import type { Message, AgentConfig } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3030';
-
-const ESTOQUE_PROMPTS = [
-  {
-    icon: '⚠️',
-    title: 'Risco de Ruptura',
-    prompt: 'Quais produtos estão com risco de ruptura nas próximas semanas?',
-  },
-  {
-    icon: '⚖️',
-    title: 'Oportunidade de Balanceamento',
-    prompt: 'Quais produtos têm excesso em algumas filiais e falta em outras?',
-  },
-  {
-    icon: '📉',
-    title: 'MAPE',
-    prompt: 'Quais produtos têm maior erro entre previsão e demanda real? Mostre por filial os itens com pior precisão de forecast.',
-  },
-  {
-    icon: '💰',
-    title: 'Capital Imobilizado',
-    prompt: 'Quais produtos estão imobilizando mais capital em excesso de estoque?',
-  },
-];
-
-const PREVENCAO_PROMPTS = [
-  {
-    icon: '📅',
-    title: 'Vencidos',
-    prompt: 'Quais produtos com validade vencida ainda constam em estoque? Mostre por filial e valor estimado de prejuízo.',
-  },
-  {
-    icon: '⏳',
-    title: 'Prevencidos',
-    prompt: 'Quais produtos estão próximos ao vencimento e precisam de ação urgente? Mostre dias restantes e quantidades por filial.',
-  },
-  {
-    icon: '🔻',
-    title: 'Estoque Negativo',
-    prompt: 'Quais produtos apresentam quantidade negativa no sistema?',
-  },
-  {
-    icon: '💥',
-    title: 'Avaria',
-    prompt: 'Quais produtos registraram avaria ou perda? Mostre o impacto por filial e o valor total de perdas.',
-  },
-];
-
-const VENDAS_PROMPTS = [
-  {
-    icon: '📊',
-    title: 'Margem',
-    prompt: 'Quais produtos ou filiais estão com margem abaixo do esperado?',
-  },
-  {
-    icon: '🛒',
-    title: 'Carrinho de Compras',
-    prompt: 'Quais produtos são vendidos juntos com mais frequência em um mesmo cupom? Mostre as principais combinações por filial.',
-  },
-  {
-    icon: '📈',
-    title: 'EPD',
-    prompt: 'Analise a elasticidade, preço e demanda dos principais produtos: como variações de preço impactam o volume vendido?',
-  },
-  {
-    icon: '🎯',
-    title: 'Metas',
-    prompt: 'Qual o percentual de meta atingida por filial e quais estão em risco de não bater?',
-  },
-];
 
 interface MessageListProps {
   messages: Message[];
   isLoading?: boolean;
   onStarterPrompt?: (prompt: string) => void;
-  selectedAgent?: 'estoque' | 'vendas' | 'prevencao';
+  selectedAgent?: AgentConfig | null;
 }
 
-export function MessageList({ messages, isLoading, onStarterPrompt, selectedAgent = 'estoque' }: MessageListProps) {
+export function MessageList({ messages, isLoading, onStarterPrompt, selectedAgent }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const starterPrompts = selectedAgent === 'vendas' ? VENDAS_PROMPTS : selectedAgent === 'prevencao' ? PREVENCAO_PROMPTS : ESTOQUE_PROMPTS;
-  const agentLabel = selectedAgent === 'vendas' ? 'Iris · Gestor de Vendas' : selectedAgent === 'prevencao' ? 'Iris · Gestor de Prevenção' : 'Iris · Gestor de Estoque';
-  const agentSubtitle = selectedAgent === 'vendas' ? 'Como posso ajudar com suas vendas hoje?' : selectedAgent === 'prevencao' ? 'Como posso ajudar com a prevenção de perdas hoje?' : 'Como posso ajudar com seu estoque hoje?';
+  const starterPrompts = selectedAgent?.perguntasRapidas || [];
+  const agentLabel = selectedAgent ? `Iris · ${selectedAgent.nome}` : 'Iris';
+  const agentSubtitle = selectedAgent?.saudacao || 'Como posso ajudar hoje?';
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

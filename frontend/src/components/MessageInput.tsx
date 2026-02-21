@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent, useRef, useEffect } from 'react';
+import type { AgentConfig } from '../types';
 
 export interface ImageData {
   data: string;
@@ -8,10 +9,10 @@ export interface ImageData {
 interface MessageInputProps {
   onSendMessage: (message: string, images?: ImageData[]) => void;
   disabled?: boolean;
-  selectedAgent?: 'estoque' | 'vendas' | 'prevencao';
+  selectedAgent?: AgentConfig | null;
 }
 
-export function MessageInput({ onSendMessage, disabled, selectedAgent = 'estoque' }: MessageInputProps) {
+export function MessageInput({ onSendMessage, disabled, selectedAgent }: MessageInputProps) {
   const [message, setMessage] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -169,7 +170,7 @@ export function MessageInput({ onSendMessage, disabled, selectedAgent = 'estoque
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={selectedAgent === 'vendas' ? 'Pergunte sobre vendas, margem, metas...' : selectedAgent === 'prevencao' ? 'Pergunte sobre vencidos, avarias, estoque negativo...' : 'Pergunte sobre estoque, rupturas, balanceamento...'}
+          placeholder={selectedAgent?.placeholderInput || 'Pergunte algo...'}
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none bg-transparent text-sm text-gray-800 placeholder-gray-400 focus:outline-none disabled:cursor-not-allowed"

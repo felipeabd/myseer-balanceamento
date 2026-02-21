@@ -36,29 +36,45 @@ export function createIrisRouter(agent: IrisAgent): Router {
   router.use(tenantMiddleware);
 
   /**
+   * GET /agents
+   * List published agents available for this tenant.
+   * Returns: { agents: AgentInfo[] }
+   */
+  router.get('/agents', async (req: Request, res: Response) => {
+    try {
+      const registry = agent.getAgentRegistry();
+      const agents = await registry.getTenantAgents(req.tenant!.tenantId);
+      res.json({ agents });
+    } catch (error) {
+      console.error('[Iris] Agents list error:', error);
+      res.status(500).json({ error: 'Failed to retrieve agents' });
+    }
+  });
+
+  /**
    * POST /chat
    * Standard request/response chat.
    *
-   * Body: { message: string, conversationId?: string }
+   * Body: { message: string, conversationId?: string, agentSlug?: string }
    * Returns: { conversationId: string, message: string }
    */
   router.post('/chat', async (req: Request, res: Response) => {
     try {
-      const { message, images, conversationId } = req.body as ChatRequest;
+      const { message, images, conversationId, agentSlug } = req.body as ChatRequest;
 
       if (!message || typeof message !== 'string') {
         res.status(400).json({ error: 'message is required' });
         return;
       }
 
-      const result = await agent.chat(req.tenant!, message, conversationId, images);
+      const result = await agent.chat(req.tenant!, message, conversationId, images, agentSlug);
 
       res.json({
         conversationId: result.conversationId,
         message: result.response,
       });
     } catch (err) {
-      console.error('[Iris Balanceamento] Chat error:', err);
+      console.error('[Iris] Chat error:', err);
       res.status(500).json({
         error: 'Problemas técnicos impediram a geração desta análise no momento.',
       });
@@ -69,12 +85,12 @@ export function createIrisRouter(agent: IrisAgent): Router {
    * POST /chat/stream
    * Server-Sent Events (SSE) streaming chat.
    *
-   * Body: { message: string, conversationId?: string }
+   * Body: { message: string, conversationId?: string, agentSlug?: string }
    * Returns: SSE stream with chunks
    */
   router.post('/chat/stream', async (req: Request, res: Response) => {
     try {
-      const { message, images, conversationId } = req.body as ChatRequest;
+      const { message, images, conversationId, agentSlug } = req.body as ChatRequest;
 
       if (!message || typeof message !== 'string') {
         res.status(400).json({ error: 'message is required' });
@@ -98,14 +114,15 @@ export function createIrisRouter(agent: IrisAgent): Router {
             res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
           }
         },
-        images
+        images,
+        agentSlug
       );
 
       // Send conversation ID as final event before closing
       res.write(`data: ${JSON.stringify({ conversationId: result.conversationId })}\n\n`);
       res.end();
     } catch (err) {
-      console.error('[Iris Balanceamento] Stream error:', err);
+      console.error('[Iris] Stream error:', err);
       if (!res.headersSent) {
         res.status(500).json({
           error: 'Problemas técnicos impediram a geração desta análise no momento.',
@@ -223,7 +240,7 @@ export function createIrisRouter(agent: IrisAgent): Router {
       const detail = await creditsManager.getCreditsDetail(req.tenant!.tenantId, date, user, hour);
       res.json(detail);
     } catch (error) {
-      console.error('[Iris Balanceamento] Credits detail error:', error);
+      console.error('[Iris] Credits detail error:', error);
       res.status(500).json({ error: 'Failed to retrieve credits detail' });
     }
   });
@@ -249,14 +266,14 @@ export function createIrisRouter(agent: IrisAgent): Router {
         daily,
       });
     } catch (error) {
-      console.error('[Iris Balanceamento] Metrics error:', error);
+      console.error('[Iris] Metrics error:', error);
       res.status(500).json({ error: 'Failed to retrieve metrics' });
     }
   });
 
   /**
    * POST /credits/add
-   * Add credits to a tenant (accumulated into contracted_brl).
+   * Add credits to a tenant (accumulated into contratado_brl).
    * Body: { amountBrl: number }
    */
   router.post('/credits/add', async (req: Request, res: Response) => {
@@ -271,7 +288,7 @@ export function createIrisRouter(agent: IrisAgent): Router {
       const info = await creditsManager.getCreditsInfo(req.tenant!.tenantId);
       res.json(info);
     } catch (error) {
-      console.error('[Iris Balanceamento] Credits add error:', error);
+      console.error('[Iris] Credits add error:', error);
       res.status(500).json({ error: 'Failed to add credits' });
     }
   });
@@ -287,7 +304,7 @@ export function createIrisRouter(agent: IrisAgent): Router {
       const recharges = await creditsManager.getRecharges(req.tenant!.tenantId, month);
       res.json(recharges);
     } catch (error) {
-      console.error('[Iris Balanceamento] Credits invoices error:', error);
+      console.error('[Iris] Credits invoices error:', error);
       res.status(500).json({ error: 'Failed to retrieve invoices' });
     }
   });
@@ -302,7 +319,7 @@ export function createIrisRouter(agent: IrisAgent): Router {
       const info = await creditsManager.getCreditsInfo(req.tenant!.tenantId);
       res.json(info);
     } catch (error) {
-      console.error('[Iris Balanceamento] Credits error:', error);
+      console.error('[Iris] Credits error:', error);
       res.status(500).json({ error: 'Failed to retrieve credits info' });
     }
   });
@@ -323,7 +340,7 @@ export function createIrisRouter(agent: IrisAgent): Router {
         metrics,
       });
     } catch (error) {
-      console.error('[Iris Balanceamento] Conversation metrics error:', error);
+      console.error('[Iris] Conversation metrics error:', error);
       res.status(500).json({ error: 'Failed to retrieve conversation metrics' });
     }
   });

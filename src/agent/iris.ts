@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { ClickHouseService } from '../clickhouse/client';
-import { buildSystemPrompt } from './prompt';
-import { agentTools } from './tools';
+import { buildSystemPrompt, buildDynamicSystemPrompt } from './prompt';
+import { agentTools, getToolsForAgent, isToolEnabledForAgent } from './tools';
 import { ConversationManager } from '../conversation/manager';
 import { UsageTracker } from '../tracking/usage-tracker';
 import { ConversationLogger } from '../tracking/conversation-logger';
@@ -12,9 +12,11 @@ import { RuleTrainerAgent } from './rule-trainer';
 import { LoadRulesSkill } from '../rules/load-rules-skill';
 import { CsvStore } from '../csv/csv-store';
 import { generateCsv } from '../csv/csv-generator';
+import { AgentRegistry } from '../builder/agent-registry';
 import {
   IrisConfig,
   TenantContext,
+  AgentDefinition,
   BalancingRule,
   ChatMessage,
   StreamCallback,
@@ -39,8 +41,9 @@ export class IrisAgent {
   private loadRulesSkill: LoadRulesSkill;
   private csvStore: CsvStore;
   private baseUrl: string;
+  private agentRegistry: AgentRegistry;
 
-  private readonly AGENT_NAME = 'iris_balanceamento';
+  private readonly LEGACY_AGENT_NAME = 'iris';
 
   /** Build message content (text only or multimodal with images) */
   private buildMessageContent(text: string, images?: ImageContent[]): MessageContent {
@@ -71,6 +74,7 @@ export class IrisAgent {
     this.loadRulesSkill = new LoadRulesSkill(this.clickhouse);
     this.csvStore = new CsvStore();
     this.baseUrl = config.baseUrl ?? `http://localhost:${process.env.PORT ?? 3030}`;
+    this.agentRegistry = new AgentRegistry(this.clickhouse);
   }
 
   /** Get usage tracker instance */
@@ -103,6 +107,62 @@ export class IrisAgent {
     return this.tenantConfigManager;
   }
 
+  /** Get agent registry instance */
+  getAgentRegistry(): AgentRegistry {
+    return this.agentRegistry;
+  }
+
+  // ── Agent Resolution ──────────────────────────────────────
+
+  /**
+   * Resolve an agent definition by slug.
+   * Returns null if not found (caller should fall back to legacy).
+   */
+  private async resolveAgent(agentSlug?: string): Promise<AgentDefinition | null> {
+    if (!agentSlug) return null;
+
+    try {
+      return await this.agentRegistry.getAgentBySlug(agentSlug);
+    } catch (err) {
+      console.warn(`[Iris] Failed to resolve agent "${agentSlug}":`, err);
+      return null;
+    }
+  }
+
+  /**
+   * Build the system prompt and tools for a request.
+   * Uses dynamic config when an agent is loaded from DB, legacy otherwise.
+   */
+  private async buildPromptAndTools(
+    agent: AgentDefinition | null,
+    tenant: TenantContext
+  ): Promise<{ systemPrompt: string; tools: Anthropic.Tool[]; agentName: string; maxTokens: number; temperature: number; maxCalls: number }> {
+    const rulesPrompt = await this.loadRulesSkill.execute(tenant.tenantId);
+
+    if (agent) {
+      return {
+        systemPrompt: buildDynamicSystemPrompt(agent, tenant, rulesPrompt),
+        tools: getToolsForAgent(agent),
+        agentName: agent.slug,
+        maxTokens: agent.maxTokens,
+        temperature: agent.temperature,
+        maxCalls: agent.maxToolCalls,
+      };
+    }
+
+    // Legacy path
+    return {
+      systemPrompt: buildSystemPrompt(tenant, this.rules) + rulesPrompt,
+      tools: agentTools,
+      agentName: this.LEGACY_AGENT_NAME,
+      maxTokens: 4096,
+      temperature: 0.2,
+      maxCalls: this.maxToolCalls,
+    };
+  }
+
+  // ── Chat (non-streaming) ──────────────────────────────────
+
   /**
    * Process a user message and return the agent's response.
    * Handles the full agentic loop: LLM → tool call → LLM → response.
@@ -112,9 +172,10 @@ export class IrisAgent {
     tenant: TenantContext,
     userMessage: string,
     conversationId?: string,
-    images?: ImageContent[]
+    images?: ImageContent[],
+    agentSlug?: string
   ): Promise<{ conversationId: string; response: string }> {
-    
+
     const conv = this.conversations.getOrCreate(conversationId, tenant);
 
     // ========== RULE TRAINING MODE DETECTION ==========
@@ -167,7 +228,7 @@ export class IrisAgent {
       };
     }
 
-    // ========== NORMAL MODE: Load rules and proceed ==========
+    // ========== NORMAL MODE: Resolve agent and proceed ==========
     // Add user message (with images if provided)
     this.conversations.addMessage(conv.id, {
       role: 'user',
@@ -175,13 +236,16 @@ export class IrisAgent {
       timestamp: new Date(),
     });
 
-    // Load active rules and inject into prompt
-    const rulesPrompt = await this.loadRulesSkill.execute(tenant.tenantId);
-    const systemPrompt = buildSystemPrompt(tenant, this.rules) + rulesPrompt;
+    // Resolve agent from DB (or null for legacy)
+    const agent = await this.resolveAgent(agentSlug);
+    const { systemPrompt, tools, agentName, maxTokens, temperature, maxCalls } =
+      await this.buildPromptAndTools(agent, tenant);
+
     const messages = this.buildAnthropicMessages(conv.messages);
 
-    // Resolve model for this tenant (configurable per tenant)
-    const model = await this.tenantConfigManager.getModel(tenant.tenantId);
+    // Resolve model: agent config → tenant config → default
+    const model = agent?.modeloPadrao
+      ?? await this.tenantConfigManager.getModel(tenant.tenantId);
 
     let toolCallCount = 0;
     let currentMessages = messages;
@@ -196,10 +260,10 @@ export class IrisAgent {
     while (true) {
       const response = await this.anthropic.messages.create({
         model,
-        max_tokens: 4096,
-        temperature: 0.2,
+        max_tokens: maxTokens,
+        temperature,
         system: systemPrompt,
-        tools: agentTools,
+        tools,
         messages: currentMessages,
       });
 
@@ -220,13 +284,12 @@ export class IrisAgent {
       }
 
       // If no tool calls or we hit the limit, we're done
-      if (toolUseBlocks.length === 0 || toolCallCount >= this.maxToolCalls) {
+      if (toolUseBlocks.length === 0 || toolCallCount >= maxCalls) {
         finalResponse = textParts.join('\n');
         break;
       }
 
       // Execute tool calls
-      const toolResults: Anthropic.MessageParam[] = [];
       const assistantContent: Anthropic.ContentBlockParam[] = [
         ...response.content.map(block => {
           if (block.type === 'text') return { type: 'text' as const, text: block.text };
@@ -255,6 +318,22 @@ export class IrisAgent {
           sqlQueries.push((block.input as Record<string, unknown>).sql as string);
         }
 
+        // Validate tool is enabled for this agent
+        if (agent && !isToolEnabledForAgent(block.name, agent)) {
+          currentMessages = [
+            ...currentMessages,
+            {
+              role: 'user' as const,
+              content: [{
+                type: 'tool_result' as const,
+                tool_use_id: block.id,
+                content: JSON.stringify({ error: `Tool "${block.name}" não está habilitada para este agente.` }),
+              }],
+            },
+          ];
+          continue;
+        }
+
         let result: string;
         try {
           result = await this.executeTool(block.name, block.input as Record<string, unknown>, tenant);
@@ -278,7 +357,7 @@ export class IrisAgent {
       }
 
       // If we've hit the limit after this round, force a final response
-      if (toolCallCount >= this.maxToolCalls) {
+      if (toolCallCount >= maxCalls) {
         // Continue the loop — the model will see tool results and generate text
       }
     }
@@ -290,7 +369,7 @@ export class IrisAgent {
       timestamp: new Date(),
     });
 
-    // Track token usage (use fixed tenant for consistency with queries)
+    // Track token usage
     await this.usageTracker.trackUsage({
       tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
@@ -304,7 +383,7 @@ export class IrisAgent {
     // Log conversation
     const responseTime = Date.now() - startTime;
     await this.conversationLogger.log({
-      agent: this.AGENT_NAME,
+      agent: agentName,
       tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
       conversationId: conv.id,
@@ -321,6 +400,8 @@ export class IrisAgent {
     return { conversationId: conv.id, response: finalResponse };
   }
 
+  // ── Chat Stream (SSE) ─────────────────────────────────────
+
   /**
    * Stream a response via SSE.
    */
@@ -329,9 +410,10 @@ export class IrisAgent {
     userMessage: string,
     conversationId: string | undefined,
     onChunk: StreamCallback,
-    images?: ImageContent[]
+    images?: ImageContent[],
+    agentSlug?: string
   ): Promise<{ conversationId: string }> {
-    
+
     const conv = this.conversations.getOrCreate(conversationId, tenant);
 
     // ========== RULE TRAINING MODE DETECTION ==========
@@ -354,7 +436,7 @@ export class IrisAgent {
         tenant.userEmail
       );
 
-      // Redirect to Rule Trainer Agent (non-streaming, use original tenant for conversation access)
+      // Redirect to Rule Trainer Agent (non-streaming)
       const response = await this.ruleTrainer.chat(
         ruleMessage || 'Iniciar treinamento de regras',
         conv.id,
@@ -372,7 +454,7 @@ export class IrisAgent {
     const isInTraining = await this.sessionManager.isInTrainingMode(conv.id);
 
     if (isInTraining) {
-      // Continue in Rule Trainer Agent (non-streaming, use original tenant for conversation access)
+      // Continue in Rule Trainer Agent (non-streaming)
       const response = await this.ruleTrainer.chat(
         userMessage,
         conv.id,
@@ -386,20 +468,23 @@ export class IrisAgent {
       return { conversationId: conv.id };
     }
 
-    // ========== NORMAL MODE: Load rules and proceed ==========
+    // ========== NORMAL MODE: Resolve agent and proceed ==========
     this.conversations.addMessage(conv.id, {
       role: 'user',
       content: this.buildMessageContent(userMessage, images),
       timestamp: new Date(),
     });
 
-    // Load active rules and inject into prompt
-    const rulesPrompt = await this.loadRulesSkill.execute(tenant.tenantId);
-    const systemPrompt = buildSystemPrompt(tenant, this.rules) + rulesPrompt;
+    // Resolve agent from DB (or null for legacy)
+    const agent = await this.resolveAgent(agentSlug);
+    const { systemPrompt, tools, agentName, maxTokens, temperature, maxCalls } =
+      await this.buildPromptAndTools(agent, tenant);
+
     const messages = this.buildAnthropicMessages(conv.messages);
 
-    // Resolve model for this tenant (configurable per tenant)
-    const model = await this.tenantConfigManager.getModel(tenant.tenantId);
+    // Resolve model: agent config → tenant config → default
+    const model = agent?.modeloPadrao
+      ?? await this.tenantConfigManager.getModel(tenant.tenantId);
 
     let toolCallCount = 0;
     let currentMessages = messages;
@@ -412,13 +497,13 @@ export class IrisAgent {
 
     while (true) {
       // Check if we still have tool budget — if yes, use non-streaming for tool loop
-      if (toolCallCount < this.maxToolCalls) {
+      if (toolCallCount < maxCalls) {
         const response = await this.anthropic.messages.create({
           model,
-          max_tokens: 4096,
-          temperature: 0.2,
+          max_tokens: maxTokens,
+          temperature,
           system: systemPrompt,
-          tools: agentTools,
+          tools,
           messages: currentMessages,
         });
 
@@ -470,6 +555,22 @@ export class IrisAgent {
             sqlQueries.push((block.input as Record<string, unknown>).sql as string);
           }
 
+          // Validate tool is enabled for this agent
+          if (agent && !isToolEnabledForAgent(block.name, agent)) {
+            currentMessages = [
+              ...currentMessages,
+              {
+                role: 'user' as const,
+                content: [{
+                  type: 'tool_result' as const,
+                  tool_use_id: block.id,
+                  content: JSON.stringify({ error: `Tool "${block.name}" não está habilitada para este agente.` }),
+                }],
+              },
+            ];
+            continue;
+          }
+
           let result: string;
           try {
             result = await this.executeTool(block.name, block.input as Record<string, unknown>, tenant);
@@ -496,7 +597,7 @@ export class IrisAgent {
       // Final streaming response after tools exhausted
       const stream = this.anthropic.messages.stream({
         model,
-        max_tokens: 4096,
+        max_tokens: maxTokens,
         system: systemPrompt,
         messages: currentMessages,
       });
@@ -523,7 +624,7 @@ export class IrisAgent {
       timestamp: new Date(),
     });
 
-    // Track token usage (use fixed tenant for consistency with queries)
+    // Track token usage
     await this.usageTracker.trackUsage({
       tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
@@ -537,7 +638,7 @@ export class IrisAgent {
     // Log conversation
     const responseTime = Date.now() - startTime;
     await this.conversationLogger.log({
-      agent: this.AGENT_NAME,
+      agent: agentName,
       tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
       conversationId: conv.id,
@@ -553,6 +654,8 @@ export class IrisAgent {
 
     return { conversationId: conv.id };
   }
+
+  // ── Tool Execution ────────────────────────────────────────
 
   /**
    * Execute a tool call from the agent.
@@ -767,6 +870,8 @@ export class IrisAgent {
 
     return JSON.stringify({ error: `Unknown tool: ${name}` });
   }
+
+  // ── Helpers ───────────────────────────────────────────────
 
   /**
    * Convert our ChatMessage[] to Anthropic's message format.

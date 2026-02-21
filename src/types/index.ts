@@ -1,6 +1,86 @@
 // ============================================================
-// Domain types for IRIS - Inventory Balancing Agent
+// Domain types for IRIS - Agent Framework
 // ============================================================
+
+// ── Agent Definition (Framework) ──────────────────────────
+
+/** Table/column configuration for an agent */
+export interface AgentTableConfig {
+  tabela: string;
+  alias: string;
+  colunas: string[];
+  filtroObrigatorio: string;
+}
+
+/** Skills that can be toggled per agent */
+export interface AgentSkills {
+  consulta_sql: boolean;
+  gerar_csv: boolean;
+  knowledge_base: boolean;
+  otimizador: boolean;
+}
+
+/** Prompt sections configured by the specialist */
+export interface AgentPromptSections {
+  personalidade: string;
+  tom: string;
+  restricoes: string;
+  exemplos: string;
+  fluxo: string;
+}
+
+/** A starter/quick question shown to the user */
+export interface StarterPrompt {
+  icon: string;
+  title: string;
+  prompt: string;
+}
+
+/** Full agent definition as stored in ia_agentes */
+export interface AgentDefinition {
+  id: string;
+  slug: string;
+  nome: string;
+  descricao: string;
+  icone: string;
+  cor: string;
+  saudacao: string;
+  placeholderInput: string;
+
+  prompt: AgentPromptSections;
+  tabelas: AgentTableConfig[];
+  skills: AgentSkills;
+  regraAnalise: string;
+  conhecimento: string;
+  perguntasRapidas: StarterPrompt[];
+
+  modeloPadrao: string;
+  maxTokens: number;
+  temperature: number;
+  maxToolCalls: number;
+
+  status: 'rascunho' | 'testando' | 'publicado';
+  custoMensalBrl: number;
+  criadoPor: string;
+  versao: number;
+  ordem: number;
+}
+
+/** Agent info returned to the consumer frontend (subset of AgentDefinition) */
+export interface AgentInfo {
+  id: string;
+  slug: string;
+  nome: string;
+  descricao: string;
+  icone: string;
+  cor: string;
+  saudacao: string;
+  placeholderInput: string;
+  perguntasRapidas: StarterPrompt[];
+  habilitado: boolean;
+}
+
+// ── Legacy Domain Types ───────────────────────────────────
 
 /** Tenant context passed on every request */
 export interface TenantContext {
@@ -83,6 +163,8 @@ export interface ChatRequest {
   message: string;
   images?: ImageContent[];
   conversationId?: string;
+  /** Agent to use (defaults to 'estoque' for backwards compatibility) */
+  agentSlug?: string;
 }
 
 /** Response from the chat endpoint */

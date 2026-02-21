@@ -1,11 +1,11 @@
 /**
- * @myseer/balanceamento
+ * @myseer/iris
  *
- * IRIS - Agente de IA para balanceamento de estoque entre lojas.
+ * IRIS - Agente de IA para análise e gestão de estoque entre lojas.
  *
  * Usage in your existing Express app:
  *
- *   import { IrisAgent, createIrisRouter } from '@myseer/balanceamento';
+ *   import { IrisAgent, createIrisRouter } from '@myseer/iris';
  *
  *   const agent = new IrisAgent({
  *     anthropicApiKey: process.env.ANTHROPIC_API_KEY!,

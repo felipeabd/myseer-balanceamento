@@ -1,4 +1,4 @@
-import type { ChatContextType } from '../types';
+import type { ChatContextType, AgentConfig } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3030';
 
@@ -20,6 +20,18 @@ export class ApiService {
   }
 
   /**
+   * Get published agents available for this tenant
+   */
+  async getAgents(): Promise<AgentConfig[]> {
+    const response = await fetch(`${API_BASE_URL}/api/iris/agents`, {
+      headers: this.getHeaders(),
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+    return data.agents || [];
+  }
+
+  /**
    * Send a message and receive streaming response via SSE
    */
   async sendMessageStream(
@@ -28,13 +40,15 @@ export class ApiService {
     onChunk: (text: string) => void,
     onComplete: (conversationId: string) => void,
     onError: (error: Error) => void,
-    images?: Array<{ data: string; mediaType: string }>
+    images?: Array<{ data: string; mediaType: string }>,
+    agentSlug?: string
   ): Promise<void> {
     try {
       // Build request body with images if provided
       const requestBody: {
         message: string;
         conversationId?: string;
+        agentSlug?: string;
         images?: Array<{
           type: 'image';
           source: {
@@ -43,7 +57,7 @@ export class ApiService {
             data: string;
           };
         }>;
-      } = { message, conversationId };
+      } = { message, conversationId, agentSlug };
 
       if (images && images.length > 0) {
         requestBody.images = images.map(img => ({
@@ -122,12 +136,13 @@ export class ApiService {
    */
   async sendMessage(
     message: string,
-    conversationId?: string
+    conversationId?: string,
+    agentSlug?: string
   ): Promise<{ conversationId: string; message: string }> {
     const response = await fetch(`${API_BASE_URL}/api/iris/chat`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify({ message, conversationId }),
+      body: JSON.stringify({ message, conversationId, agentSlug }),
     });
 
     if (!response.ok) {

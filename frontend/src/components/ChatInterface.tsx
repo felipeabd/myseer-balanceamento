@@ -6,7 +6,7 @@ import { CreditsPanel } from './CreditsPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { SummaryPanel } from './SummaryPanel';
 import { ApiService } from '../services/api';
-import type { Message, Conversation, ChatContextType } from '../types';
+import type { Message, Conversation, ChatContextType, AgentConfig } from '../types';
 
 interface ChatInterfaceProps {
   context: ChatContextType;
@@ -19,13 +19,29 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<'estoque' | 'vendas' | 'prevencao'>('estoque');
+  const [agents, setAgents] = useState<AgentConfig[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<AgentConfig | null>(null);
   const [apiService] = useState(() => new ApiService(context));
 
-  // Load conversations on mount
+  // Load conversations and agents on mount
   useEffect(() => {
     loadConversations();
+    loadAgents();
   }, []);
+
+  const loadAgents = async () => {
+    try {
+      const data = await apiService.getAgents();
+      setAgents(data);
+      // Auto-select first enabled agent
+      const firstEnabled = data.find(a => a.habilitado);
+      if (firstEnabled && !selectedAgent) {
+        setSelectedAgent(firstEnabled);
+      }
+    } catch (error) {
+      console.error('Failed to load agents:', error);
+    }
+  };
 
   const loadConversations = async () => {
     try {
@@ -132,7 +148,8 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
             };
           });
         },
-        images
+        images,
+        selectedAgent?.slug
       );
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -201,6 +218,7 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
         onOpenCredits={() => setCreditsOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenSummary={() => setSummaryOpen(true)}
+        agents={agents}
         selectedAgent={selectedAgent}
         onSelectAgent={setSelectedAgent}
       />

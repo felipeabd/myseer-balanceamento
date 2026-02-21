@@ -7,6 +7,7 @@ import express from 'express';
 import cors from 'cors';
 import { IrisAgent } from './agent/iris';
 import { createIrisRouter } from './api/router';
+import { createBuilderRouter } from './api/builder-router';
 
 const PORT = process.env.PORT ?? 3030;
 
@@ -48,34 +49,44 @@ async function main() {
 
   // Health check
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', service: 'iris-balanceamento' });
+    res.json({ status: 'ok', service: 'iris' });
   });
 
   // Ensure ClickHouse tables exist
   await agent.getCreditsManager().ensureTable();
   await agent.getTenantConfigManager().ensureTable();
+  await agent.getAgentRegistry().ensureTables();
 
-  // Mount IRIS routes
+  // Mount IRIS routes (consumer)
   app.use('/api/iris', createIrisRouter(agent));
 
+  // Mount Builder routes (agent management)
+  app.use('/api/builder', createBuilderRouter(agent));
+
   app.listen(PORT, () => {
-    console.log(`[Iris Balanceamento] Server running on port ${PORT}`);
-    console.log(`[Iris Balanceamento] Endpoints:`);
-    console.log(`  POST /api/iris/chat             - Chat (request/response)`);
+    console.log(`[Iris] Server running on port ${PORT}`);
+    console.log(`[Iris] Consumer endpoints:`);
+    console.log(`  GET  /api/iris/agents            - List published agents`);
+    console.log(`  POST /api/iris/chat              - Chat (request/response)`);
     console.log(`  POST /api/iris/chat/stream       - Chat (SSE streaming)`);
     console.log(`  GET  /api/iris/conversations     - List conversations`);
     console.log(`  GET  /api/iris/download/csv/:id  - Download CSV`);
+    console.log(`[Iris] Builder endpoints:`);
+    console.log(`  GET  /api/builder/agents         - List all agents`);
+    console.log(`  POST /api/builder/agents         - Create agent`);
+    console.log(`  PUT  /api/builder/agents/:id     - Update agent`);
+    console.log(`  GET  /api/builder/tables         - List ClickHouse tables`);
   });
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
-    console.log('[Iris Balanceamento] Shutting down...');
+    console.log('[Iris] Shutting down...');
     await agent.destroy();
     process.exit(0);
   });
 }
 
 main().catch(err => {
-  console.error('[Iris Balanceamento] Fatal error:', err);
+  console.error('[Iris] Fatal error:', err);
   process.exit(1);
 });
