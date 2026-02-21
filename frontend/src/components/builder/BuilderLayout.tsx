@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BuilderApiService, type AgentDefinitionFull } from '../../services/builder-api';
 import { AgentEditor } from './AgentEditor';
-import { navigate } from '../../App';
 
 interface BuilderLayoutProps {
   userEmail: string;
