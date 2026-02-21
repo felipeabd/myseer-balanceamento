@@ -149,7 +149,19 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
           });
         },
         images,
-        selectedAgent?.slug
+        selectedAgent?.slug,
+        // onMessageId — attach the log ID to the assistant message for feedback
+        (messageId: string) => {
+          setCurrentConversation((prev) => {
+            if (!prev) return prev;
+            const messages = [...prev.messages];
+            const lastIdx = messages.map(m => m.role).lastIndexOf('assistant');
+            if (lastIdx !== -1) {
+              messages[lastIdx] = { ...messages[lastIdx], messageId };
+            }
+            return { ...prev, messages };
+          });
+        }
       );
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -175,6 +187,16 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
       setCurrentConversation(conv);
     } catch (error) {
       console.error('Failed to load conversation:', error);
+    }
+  };
+
+  const handleFeedback = async (messageId: string, rating: 1 | -1, feedbackText?: string) => {
+    const conversationId = currentConversation?.id;
+    if (!conversationId || conversationId === 'temp') return;
+    try {
+      await apiService.submitFeedback(messageId, conversationId, rating, feedbackText);
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
     }
   };
 
@@ -229,6 +251,7 @@ export function ChatInterface({ context }: ChatInterfaceProps) {
           isLoading={isLoading}
           onStarterPrompt={handleSendMessage}
           selectedAgent={selectedAgent}
+          onFeedback={handleFeedback}
         />
         <MessageInput
           onSendMessage={handleSendMessage}

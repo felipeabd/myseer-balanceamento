@@ -3,6 +3,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  messageId?: string; // log ID returned by the backend, used for feedback
 }
 
 export interface Conversation {

@@ -72,6 +72,7 @@ export function createIrisRouter(agent: IrisAgent): Router {
       res.json({
         conversationId: result.conversationId,
         message: result.response,
+        messageId: result.messageId,
       });
     } catch (err) {
       console.error('[Iris] Chat error:', err);
@@ -118,8 +119,9 @@ export function createIrisRouter(agent: IrisAgent): Router {
         agentSlug
       );
 
-      // Send conversation ID as final event before closing
-      res.write(`data: ${JSON.stringify({ conversationId: result.conversationId })}\n\n`);
+      // Send conversation ID + message ID as final event before closing
+      console.log('[Iris] Stream final event:', { conversationId: result.conversationId, messageId: result.messageId });
+      res.write(`data: ${JSON.stringify({ conversationId: result.conversationId, messageId: result.messageId })}\n\n`);
       res.end();
     } catch (err) {
       console.error('[Iris] Stream error:', err);
@@ -347,6 +349,35 @@ export function createIrisRouter(agent: IrisAgent): Router {
     } catch (error) {
       console.error('[Iris] Conversation metrics error:', error);
       res.status(500).json({ error: 'Failed to retrieve conversation metrics' });
+    }
+  });
+
+  /**
+   * POST /feedback
+   * Submit thumbs up/down feedback for a message.
+   * Body: { messageId: string, conversationId: string, rating: 1 | -1, feedbackText?: string }
+   */
+  router.post('/feedback', async (req: Request, res: Response) => {
+    try {
+      const { messageId, conversationId, rating, feedbackText } = req.body as {
+        messageId: string;
+        conversationId: string;
+        rating: 1 | -1;
+        feedbackText?: string;
+      };
+
+      if (!messageId || !conversationId || (rating !== 1 && rating !== -1)) {
+        res.status(400).json({ error: 'messageId, conversationId e rating (1 ou -1) são obrigatórios' });
+        return;
+      }
+
+      const logger = agent.getConversationLogger();
+      await logger.submitFeedback(messageId, conversationId, rating, feedbackText ?? '');
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('[Iris] Feedback error:', error);
+      res.status(500).json({ error: 'Failed to submit feedback' });
     }
   });
 

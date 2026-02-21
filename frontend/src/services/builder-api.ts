@@ -35,6 +35,8 @@ export interface AgentDefinitionFull {
   maxTokens: number;
   temperature: number;
   maxToolCalls: number;
+  contextoConversas: boolean;
+  numConversasAnteriores: number;
   status: 'rascunho' | 'testando' | 'publicado';
   custoMensalBrl: number;
   criadoPor: string;
@@ -58,6 +60,35 @@ export interface ColumnInfo {
   name: string;
   type: string;
   comment: string;
+}
+
+export interface AgentAnalytics {
+  period: number;
+  stats: {
+    total_messages: number;
+    total_conversations: number;
+    avg_response_time_ms: number;
+    error_count: number;
+    top_questions: string[];
+  };
+  daily: Array<{
+    date: string;
+    total_tokens: number;
+    cost_usd: number;
+    request_count: number;
+  }>;
+  by_tenant: Array<{
+    tenant_id: string;
+    total_messages: number;
+    total_conversations: number;
+    error_count: number;
+  }>;
+  by_user: Array<{
+    user_email: string;
+    total_messages: number;
+    total_conversations: number;
+    error_count: number;
+  }>;
 }
 
 export class BuilderApiService {
@@ -163,6 +194,16 @@ export class BuilderApiService {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     return data.columns;
+  }
+
+  // ── Analytics ───────────────────────────────────────────
+
+  async getAgentAnalytics(id: string, days: number = 30): Promise<AgentAnalytics> {
+    const res = await fetch(`${API_BASE_URL}/api/builder/agents/${id}/analytics?days=${days}`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
   }
 
   // ── Test Chat ───────────────────────────────────────────

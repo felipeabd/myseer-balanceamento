@@ -59,6 +59,10 @@ export interface AgentDefinition {
   temperature: number;
   maxToolCalls: number;
 
+  // Cross-conversation context
+  contextoConversas: boolean;
+  numConversasAnteriores: number;
+
   status: 'rascunho' | 'testando' | 'publicado';
   custoMensalBrl: number;
   criadoPor: string;

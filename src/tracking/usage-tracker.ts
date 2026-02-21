@@ -160,6 +160,29 @@ export class UsageTracker {
   }
 
   /**
+   * Get daily usage breakdown for a specific agent (no tenant filter — builder scope)
+   */
+  async getAgentDailyUsage(
+    agentSlug: string,
+    days: number = 30
+  ): Promise<Array<{ date: string; total_tokens: number; cost_usd: number; request_count: number }>> {
+    const sql = `
+      SELECT
+        toDate(u.timestamp) as date,
+        sum(u.total_tokens) as total_tokens,
+        sum(u.cost_usd) as cost_usd,
+        count() as request_count
+      FROM ia_usage_tokens u
+      INNER JOIN ia_agents_log l ON u.conversation_id = l.conversation_id
+      WHERE l.agent = '${agentSlug}'
+        AND toDate(u.timestamp) >= today() - INTERVAL ${days} DAY
+      GROUP BY date
+      ORDER BY date ASC
+    `;
+    return await this.clickhouse.query(sql, { tenantId: '', userEmail: '' }) as any[];
+  }
+
+  /**
    * Get daily usage breakdown for a tenant
    */
   async getDailyUsage(

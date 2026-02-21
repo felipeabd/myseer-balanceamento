@@ -33,12 +33,46 @@ export class ConversationLogger {
 
   constructor(clickhouse: ClickHouseService) {
     this.clickhouse = clickhouse;
+    this.ensureFeedbackTable().catch(err =>
+      console.error('[ConversationLogger] Failed to create feedback table:', err)
+    );
+  }
+
+  private async ensureFeedbackTable(): Promise<void> {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS ia_feedback (
+        message_id String,
+        conversation_id String,
+        rating Int8,
+        feedback_text String DEFAULT '',
+        timestamp DateTime DEFAULT now()
+      ) ENGINE = ReplacingMergeTree(timestamp)
+      ORDER BY message_id
+    `;
+    await this.clickhouse.execute(sql);
   }
 
   /**
-   * Log a conversation interaction
+   * Submit thumbs up/down feedback for a message
    */
-  async log(data: ConversationLog): Promise<void> {
+  async submitFeedback(
+    messageId: string,
+    conversationId: string,
+    rating: 1 | -1,
+    feedbackText: string = ''
+  ): Promise<void> {
+    const escape = (str: string) => str.replace(/'/g, "\\'");
+    const sql = `
+      INSERT INTO ia_feedback (message_id, conversation_id, rating, feedback_text)
+      VALUES ('${messageId}', '${conversationId}', ${rating}, '${escape(feedbackText)}')
+    `;
+    await this.clickhouse.execute(sql);
+  }
+
+  /**
+   * Log a conversation interaction. Returns the generated messageId.
+   */
+  async log(data: ConversationLog): Promise<string> {
     const messageId = uuidv4();
 
     // Truncate response to 500 chars
@@ -114,6 +148,8 @@ export class ConversationLogger {
       console.error('[ConversationLogger] Query was:', query);
       // Don't throw - we don't want to break the app if logging fails
     }
+
+    return messageId;
   }
 
   /**
@@ -196,6 +232,65 @@ export class ConversationLogger {
 
     const result = await this.clickhouse.query(sql, { tenantId, userEmail: '' });
     return result[0] || {};
+  }
+
+  /**
+   * Get aggregated stats for an agent (no tenant filter — builder scope)
+   */
+  async getAgentStats(agentSlug: string, days: number = 30): Promise<any> {
+    const sql = `
+      SELECT
+        count() as total_messages,
+        countDistinct(conversation_id) as total_conversations,
+        avg(response_time_ms) as avg_response_time_ms,
+        countIf(has_error = 1) as error_count,
+        topK(10)(user_question) as top_questions
+      FROM ia_agents_log
+      WHERE agent = '${agentSlug}'
+        AND date >= today() - INTERVAL ${days} DAY
+    `;
+    const result = await this.clickhouse.query(sql, { tenantId: '', userEmail: '' });
+    return result[0] || {};
+  }
+
+  /**
+   * Get interaction breakdown by tenant (client) for an agent
+   */
+  async getAgentStatsByTenant(agentSlug: string, days: number = 30): Promise<any[]> {
+    const sql = `
+      SELECT
+        tenant_id,
+        count() as total_messages,
+        countDistinct(conversation_id) as total_conversations,
+        countIf(has_error = 1) as error_count
+      FROM ia_agents_log
+      WHERE agent = '${agentSlug}'
+        AND date >= today() - INTERVAL ${days} DAY
+      GROUP BY tenant_id
+      ORDER BY total_messages DESC
+      LIMIT 50
+    `;
+    return await this.clickhouse.query(sql, { tenantId: '', userEmail: '' });
+  }
+
+  /**
+   * Get interaction breakdown by user for an agent
+   */
+  async getAgentStatsByUser(agentSlug: string, days: number = 30): Promise<any[]> {
+    const sql = `
+      SELECT
+        user_email,
+        count() as total_messages,
+        countDistinct(conversation_id) as total_conversations,
+        countIf(has_error = 1) as error_count
+      FROM ia_agents_log
+      WHERE agent = '${agentSlug}'
+        AND date >= today() - INTERVAL ${days} DAY
+      GROUP BY user_email
+      ORDER BY total_messages DESC
+      LIMIT 50
+    `;
+    return await this.clickhouse.query(sql, { tenantId: '', userEmail: '' });
   }
 
   /**

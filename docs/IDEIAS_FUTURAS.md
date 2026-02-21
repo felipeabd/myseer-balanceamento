@@ -47,13 +47,9 @@ Implementado usando o histórico natural do ReplacingMergeTree (sem tabela extra
 
 ---
 
-## 6. Contexto Cross-Conversa (Resumo no System Prompt)
+## 6. ~~Contexto Cross-Conversa (Resumo no System Prompt)~~ (IMPLEMENTADO)
 
-**Contexto:** Hoje cada conversa nova começa do zero. O agente não lembra do que foi discutido em conversas anteriores do mesmo usuário.
-
-**Ideia:** Ao iniciar uma conversa nova, carregar resumos das últimas N conversas do usuário e injetar no system prompt. Exemplo: "O usuário já conversou sobre ruptura na linha X, excesso na filial Y, etc."
-
-**Complexidade:** Baixa. Já temos as mensagens persistidas em `ia_mensagens`. Basta buscar as últimas conversas, gerar resumo (pode ser via LLM ou simples truncamento) e incluir no prompt.
+Implementado com `SummaryGenerator` que gera resumos via LLM (Haiku) após cada resposta do assistente (fire-and-forget). Resumos armazenados na tabela `ia_resumos_conversas` (ReplacingMergeTree). Na conversa nova, resumos das últimas N conversas são injetados no system prompt como seção "CONTEXTO DE CONVERSAS ANTERIORES". Configurável por agente no Builder (toggle + número de conversas).
 
 ---
 

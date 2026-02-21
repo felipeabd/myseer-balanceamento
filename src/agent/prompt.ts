@@ -9,7 +9,8 @@ import { BalancingRule, TenantContext, AgentDefinition, AgentTableConfig } from 
 export function buildDynamicSystemPrompt(
   agent: AgentDefinition,
   tenant: TenantContext,
-  rulesPrompt: string = ''
+  rulesPrompt: string = '',
+  summariesPrompt: string = ''
 ): string {
   const sections: string[] = [];
 
@@ -47,6 +48,11 @@ export function buildDynamicSystemPrompt(
   // Conhecimento base do agente (definido pelo especialista)
   if (agent.conhecimento) {
     sections.push(`## CONHECIMENTO\n${agent.conhecimento}`);
+  }
+
+  // Cross-conversation context (summaries from previous conversations)
+  if (summariesPrompt) {
+    sections.push(summariesPrompt);
   }
 
   // Regras dinâmicas do banco (injetadas pelo loadRulesSkill)

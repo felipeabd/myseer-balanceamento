@@ -3,6 +3,7 @@ import { BuilderApiService, type AgentDefinitionFull, type AgentVersion } from '
 import { TestChat } from './TestChat';
 import { TableSelector } from './TableSelector';
 import { StarterPromptsEditor } from './StarterPromptsEditor';
+import { Analytics } from './Analytics';
 
 interface AgentEditorProps {
   agent: AgentDefinitionFull;
@@ -13,7 +14,7 @@ interface AgentEditorProps {
   onRollback: (id: string, versao: number) => Promise<AgentDefinitionFull>;
 }
 
-type Tab = 'basico' | 'prompt' | 'tabelas' | 'skills' | 'regras' | 'conhecimento' | 'perguntas' | 'config' | 'historico' | 'teste';
+type Tab = 'basico' | 'prompt' | 'tabelas' | 'skills' | 'regras' | 'conhecimento' | 'perguntas' | 'config' | 'historico' | 'teste' | 'analytics';
 
 export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRollback }: AgentEditorProps) {
   const [tab, setTab] = useState<Tab>('basico');
@@ -44,6 +45,8 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
   const [maxTokens, setMaxTokens] = useState(agent.maxTokens);
   const [temperature, setTemperature] = useState(agent.temperature);
   const [maxToolCalls, setMaxToolCalls] = useState(agent.maxToolCalls);
+  const [contextoConversas, setContextoConversas] = useState(agent.contextoConversas ?? false);
+  const [numConversasAnteriores, setNumConversasAnteriores] = useState(agent.numConversasAnteriores ?? 5);
 
   const handleSave = async () => {
     setSaving(true);
@@ -66,6 +69,8 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
         maxTokens,
         temperature,
         maxToolCalls,
+        contextoConversas,
+        numConversasAnteriores,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -87,6 +92,7 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
     { key: 'config', label: 'Config' },
     { key: 'historico', label: 'Historico' },
     { key: 'teste', label: 'Testar' },
+    { key: 'analytics', label: 'Analytics' },
   ];
 
   const statusBadge = agent.status === 'publicado'
@@ -281,6 +287,37 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
                   />
                 </div>
               </div>
+
+              {/* Cross-conversation context */}
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-1">Contexto entre conversas</h3>
+                <p className="text-xs text-gray-500 mb-3">
+                  Quando habilitado, o agente recebe resumos das conversas anteriores do usuario para manter continuidade no atendimento.
+                </p>
+                <Toggle
+                  label="Habilitar contexto de conversas anteriores"
+                  checked={contextoConversas}
+                  onChange={setContextoConversas}
+                />
+                {contextoConversas && (
+                  <div className="mt-3 ml-13">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Numero de conversas anteriores
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={numConversasAnteriores}
+                      onChange={(e) => setNumConversasAnteriores(Number(e.target.value))}
+                      className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Cada resumo adiciona ~100-150 tokens ao prompt. Recomendado: 3-10.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -295,6 +332,10 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
 
           {tab === 'teste' && (
             <TestChat agentId={agent.id} agentNome={agent.nome} api={api} />
+          )}
+
+          {tab === 'analytics' && (
+            <Analytics agentId={agent.id} api={api} />
           )}
         </div>
       </div>

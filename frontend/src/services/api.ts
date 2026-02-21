@@ -41,7 +41,8 @@ export class ApiService {
     onComplete: (conversationId: string) => void,
     onError: (error: Error) => void,
     images?: Array<{ data: string; mediaType: string }>,
-    agentSlug?: string
+    agentSlug?: string,
+    onMessageId?: (messageId: string) => void
   ): Promise<void> {
     try {
       // Build request body with images if provided
@@ -115,6 +116,10 @@ export class ApiService {
 
               if (parsed.conversationId) {
                 onComplete(parsed.conversationId);
+              }
+
+              if (parsed.messageId && onMessageId) {
+                onMessageId(parsed.messageId);
               }
 
               if (parsed.error) {
@@ -259,6 +264,23 @@ export class ApiService {
     });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return response.json();
+  }
+
+  /**
+   * Submit thumbs up/down feedback for a message
+   */
+  async submitFeedback(
+    messageId: string,
+    conversationId: string,
+    rating: 1 | -1,
+    feedbackText?: string
+  ): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/api/iris/feedback`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ messageId, conversationId, rating, feedbackText }),
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   }
 
   /**

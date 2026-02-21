@@ -13,6 +13,7 @@ import { LoadRulesSkill } from '../rules/load-rules-skill';
 import { CsvStore } from '../csv/csv-store';
 import { generateCsv } from '../csv/csv-generator';
 import { AgentRegistry } from '../builder/agent-registry';
+import { SummaryGenerator, formatSummariesForPrompt } from '../conversation/summary-generator';
 import {
   IrisConfig,
   TenantContext,
@@ -42,6 +43,7 @@ export class IrisAgent {
   private csvStore: CsvStore;
   private baseUrl: string;
   private agentRegistry: AgentRegistry;
+  private summaryGenerator: SummaryGenerator;
 
   private readonly LEGACY_AGENT_NAME = 'iris';
 
@@ -75,6 +77,7 @@ export class IrisAgent {
     this.csvStore = new CsvStore();
     this.baseUrl = config.baseUrl ?? `http://localhost:${process.env.PORT ?? 3030}`;
     this.agentRegistry = new AgentRegistry(this.clickhouse);
+    this.summaryGenerator = new SummaryGenerator(this.clickhouse, this.anthropic);
   }
 
   /** Get usage tracker instance */
@@ -135,13 +138,30 @@ export class IrisAgent {
    */
   private async buildPromptAndTools(
     agent: AgentDefinition | null,
-    tenant: TenantContext
+    tenant: TenantContext,
+    currentConversationId?: string
   ): Promise<{ systemPrompt: string; tools: Anthropic.Tool[]; agentName: string; maxTokens: number; temperature: number; maxCalls: number }> {
-    const rulesPrompt = await this.loadRulesSkill.execute(tenant.tenantId);
-
     if (agent) {
+      // Fetch rules and summaries in parallel
+      const [rulesPrompt, summaries] = await Promise.all([
+        this.loadRulesSkill.execute(tenant.tenantId),
+        agent.contextoConversas && currentConversationId
+          ? this.summaryGenerator.getRecentSummaries(
+              tenant.tenantId,
+              tenant.userEmail,
+              agent.slug,
+              currentConversationId,
+              agent.numConversasAnteriores
+            )
+          : Promise.resolve([]),
+      ]);
+
+      const summariesPrompt = summaries.length > 0
+        ? formatSummariesForPrompt(summaries)
+        : '';
+
       return {
-        systemPrompt: buildDynamicSystemPrompt(agent, tenant, rulesPrompt),
+        systemPrompt: buildDynamicSystemPrompt(agent, tenant, rulesPrompt, summariesPrompt),
         tools: getToolsForAgent(agent),
         agentName: agent.slug,
         maxTokens: agent.maxTokens,
@@ -151,6 +171,7 @@ export class IrisAgent {
     }
 
     // Legacy path
+    const rulesPrompt = await this.loadRulesSkill.execute(tenant.tenantId);
     return {
       systemPrompt: buildSystemPrompt(tenant, this.rules) + rulesPrompt,
       tools: agentTools,
@@ -174,9 +195,9 @@ export class IrisAgent {
     conversationId?: string,
     images?: ImageContent[],
     agentSlug?: string
-  ): Promise<{ conversationId: string; response: string }> {
+  ): Promise<{ conversationId: string; response: string; messageId?: string }> {
 
-    const conv = await this.conversations.getOrCreate(conversationId, tenant);
+    const conv = await this.conversations.getOrCreate(conversationId, tenant, agentSlug);
 
     // ========== RULE TRAINING MODE DETECTION ==========
     // 1. Check if user wants to enter training mode (explicit command)
@@ -239,7 +260,7 @@ export class IrisAgent {
     // Resolve agent from DB (or null for legacy)
     const agent = await this.resolveAgent(agentSlug);
     const { systemPrompt, tools, agentName, maxTokens, temperature, maxCalls } =
-      await this.buildPromptAndTools(agent, tenant);
+      await this.buildPromptAndTools(agent, tenant, conv.id);
 
     const messages = this.buildAnthropicMessages(conv.messages);
 
@@ -369,6 +390,13 @@ export class IrisAgent {
       timestamp: new Date(),
     });
 
+    // Generate/update conversation summary (fire-and-forget)
+    if (agent?.contextoConversas) {
+      this.summaryGenerator.generateSummary(
+        conv.id, tenant.tenantId, tenant.userEmail, agent.slug, conv.messages
+      ).catch(err => console.error('[Iris] Summary generation failed:', err));
+    }
+
     // Track token usage
     await this.usageTracker.trackUsage({
       tenantId: tenant.tenantId,
@@ -382,7 +410,7 @@ export class IrisAgent {
 
     // Log conversation
     const responseTime = Date.now() - startTime;
-    await this.conversationLogger.log({
+    const messageId = await this.conversationLogger.log({
       agent: agentName,
       tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
@@ -397,7 +425,7 @@ export class IrisAgent {
       responseTimeMs: responseTime,
     });
 
-    return { conversationId: conv.id, response: finalResponse };
+    return { conversationId: conv.id, response: finalResponse, messageId };
   }
 
   // ── Chat Stream (SSE) ─────────────────────────────────────
@@ -412,9 +440,9 @@ export class IrisAgent {
     onChunk: StreamCallback,
     images?: ImageContent[],
     agentSlug?: string
-  ): Promise<{ conversationId: string }> {
+  ): Promise<{ conversationId: string; messageId?: string }> {
 
-    const conv = await this.conversations.getOrCreate(conversationId, tenant);
+    const conv = await this.conversations.getOrCreate(conversationId, tenant, agentSlug);
 
     // ========== RULE TRAINING MODE DETECTION ==========
     // 1. Check if user wants to enter training mode (explicit command)
@@ -478,7 +506,7 @@ export class IrisAgent {
     // Resolve agent from DB (or null for legacy)
     const agent = await this.resolveAgent(agentSlug);
     const { systemPrompt, tools, agentName, maxTokens, temperature, maxCalls } =
-      await this.buildPromptAndTools(agent, tenant);
+      await this.buildPromptAndTools(agent, tenant, conv.id);
 
     const messages = this.buildAnthropicMessages(conv.messages);
 
@@ -624,6 +652,13 @@ export class IrisAgent {
       timestamp: new Date(),
     });
 
+    // Generate/update conversation summary (fire-and-forget)
+    if (agent?.contextoConversas) {
+      this.summaryGenerator.generateSummary(
+        conv.id, tenant.tenantId, tenant.userEmail, agent.slug, conv.messages
+      ).catch(err => console.error('[Iris] Summary generation failed:', err));
+    }
+
     // Track token usage
     await this.usageTracker.trackUsage({
       tenantId: tenant.tenantId,
@@ -637,7 +672,7 @@ export class IrisAgent {
 
     // Log conversation
     const responseTime = Date.now() - startTime;
-    await this.conversationLogger.log({
+    const messageId = await this.conversationLogger.log({
       agent: agentName,
       tenantId: tenant.tenantId,
       userEmail: tenant.userEmail,
@@ -652,7 +687,7 @@ export class IrisAgent {
       responseTimeMs: responseTime,
     });
 
-    return { conversationId: conv.id };
+    return { conversationId: conv.id, messageId };
   }
 
   // ── Tool Execution ────────────────────────────────────────

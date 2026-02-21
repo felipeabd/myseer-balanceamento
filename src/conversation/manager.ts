@@ -76,6 +76,11 @@ export class ConversationManager {
         ORDER BY (tenant_id, conversa_id, indice)
       `);
 
+      // Migration: add agent_slug for cross-conversation context filtering
+      await this.clickhouse.execute(
+        `ALTER TABLE ia_conversas ADD COLUMN IF NOT EXISTS agent_slug String DEFAULT ''`
+      );
+
       this.tablesReady = true;
       console.log('[ConversationManager] ClickHouse tables ready');
     } catch (err) {
@@ -92,7 +97,7 @@ export class ConversationManager {
   // ── Public API ───────────────────────────────────────────
 
   /** Get existing conversation (from cache or DB) or create a new one */
-  async getOrCreate(id: string | undefined, tenant: TenantContext): Promise<Conversation> {
+  async getOrCreate(id: string | undefined, tenant: TenantContext, agentSlug?: string): Promise<Conversation> {
     // 1. Check cache
     if (id && this.cache.has(id)) {
       const conv = this.cache.get(id)!;
@@ -128,7 +133,7 @@ export class ConversationManager {
     this.cache.set(conversation.id, conversation);
 
     // Persist to DB (fire-and-forget)
-    this.persistNewConversation(conversation).catch(err => {
+    this.persistNewConversation(conversation, agentSlug).catch(err => {
       console.error('[ConversationManager] Failed to persist new conversation:', err);
     });
 
@@ -304,15 +309,16 @@ export class ConversationManager {
   }
 
   /** Persist a new conversation to ClickHouse */
-  private async persistNewConversation(conv: Conversation): Promise<void> {
+  private async persistNewConversation(conv: Conversation, agentSlug?: string): Promise<void> {
     if (!this.tablesReady) return;
 
     await this.clickhouse.execute(`
-      INSERT INTO ia_conversas (conversa_id, tenant_id, email_usuario, titulo, ultima_mensagem, criada_em, atualizada_em, ativo)
+      INSERT INTO ia_conversas (conversa_id, tenant_id, email_usuario, agent_slug, titulo, ultima_mensagem, criada_em, atualizada_em, ativo)
       VALUES (
         '${esc(conv.id)}',
         '${esc(conv.tenantId)}',
         '${esc(conv.userEmail)}',
+        '${esc(agentSlug ?? '')}',
         '',
         '',
         '${toDateTime(conv.createdAt)}',

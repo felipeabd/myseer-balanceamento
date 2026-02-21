@@ -311,5 +311,38 @@ export function createBuilderRouter(agent: IrisAgent): Router {
     }
   });
 
+  // ── Analytics ───────────────────────────────────────────
+
+  /**
+   * GET /agents/:id/analytics?days=30
+   * Returns usage stats and daily breakdown for an agent.
+   */
+  router.get('/agents/:id/analytics', async (req: Request, res: Response) => {
+    try {
+      const days = parseInt((req.query.days as string) ?? '30', 10);
+      const registry = agent.getAgentRegistry();
+      const agentDef = await registry.getAgentById(req.params.id as string);
+      if (!agentDef) {
+        res.status(404).json({ error: 'Agent not found' });
+        return;
+      }
+
+      const logger = agent.getConversationLogger();
+      const tracker = agent.getUsageTracker();
+
+      const [stats, daily, by_tenant, by_user] = await Promise.all([
+        logger.getAgentStats(agentDef.slug, days),
+        tracker.getAgentDailyUsage(agentDef.slug, days),
+        logger.getAgentStatsByTenant(agentDef.slug, days),
+        logger.getAgentStatsByUser(agentDef.slug, days),
+      ]);
+
+      res.json({ period: days, stats, daily, by_tenant, by_user });
+    } catch (error) {
+      console.error('[Builder] Analytics error:', error);
+      res.status(500).json({ error: 'Failed to get analytics' });
+    }
+  });
+
   return router;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Message, AgentConfig } from '../types';
@@ -10,10 +10,16 @@ interface MessageListProps {
   isLoading?: boolean;
   onStarterPrompt?: (prompt: string) => void;
   selectedAgent?: AgentConfig | null;
+  onFeedback?: (messageId: string, rating: 1 | -1, feedbackText?: string) => void;
 }
 
-export function MessageList({ messages, isLoading, onStarterPrompt, selectedAgent }: MessageListProps) {
+export function MessageList({ messages, isLoading, onStarterPrompt, selectedAgent, onFeedback }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Track per-message feedback state: messageId → rating submitted
+  const [feedbackSent, setFeedbackSent] = useState<Record<string, 1 | -1>>({});
+  // Track which message is showing the dislike text input
+  const [dislikeOpen, setDislikeOpen] = useState<string | null>(null);
+  const [dislikeText, setDislikeText] = useState('');
   const starterPrompts = selectedAgent?.perguntasRapidas || [];
   const agentLabel = selectedAgent ? `Iris · ${selectedAgent.nome}` : 'Iris';
   const agentSubtitle = selectedAgent?.saudacao || 'Como posso ajudar hoje?';
@@ -131,6 +137,75 @@ export function MessageList({ messages, isLoading, onStarterPrompt, selectedAgen
                   minute: '2-digit',
                 })}
               </p>
+
+              {/* Feedback buttons — only for assistant messages with a messageId */}
+              {msg.role === 'assistant' && msg.messageId && onFeedback && (
+                <div className="mt-2 pt-2 border-t border-gray-100">
+                  {feedbackSent[msg.messageId] ? (
+                    <p className="text-xs text-gray-400">
+                      {feedbackSent[msg.messageId] === 1 ? '👍 Obrigado!' : '👎 Feedback enviado'}
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            onFeedback(msg.messageId!, 1);
+                            setFeedbackSent(prev => ({ ...prev, [msg.messageId!]: 1 }));
+                            setDislikeOpen(null);
+                          }}
+                          className="p-1 rounded hover:bg-green-50 text-gray-400 hover:text-green-600 transition-colors"
+                          title="Boa resposta"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDislikeOpen(dislikeOpen === msg.messageId ? null : msg.messageId!);
+                            setDislikeText('');
+                          }}
+                          className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                          title="Resposta ruim"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
+                          </svg>
+                        </button>
+                      </div>
+                      {dislikeOpen === msg.messageId && (
+                        <div className="flex gap-1.5 items-center">
+                          <input
+                            type="text"
+                            value={dislikeText}
+                            onChange={(e) => setDislikeText(e.target.value)}
+                            placeholder="O que estava errado? (opcional)"
+                            className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-red-300"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                onFeedback(msg.messageId!, -1, dislikeText);
+                                setFeedbackSent(prev => ({ ...prev, [msg.messageId!]: -1 }));
+                                setDislikeOpen(null);
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={() => {
+                              onFeedback(msg.messageId!, -1, dislikeText);
+                              setFeedbackSent(prev => ({ ...prev, [msg.messageId!]: -1 }));
+                              setDislikeOpen(null);
+                            }}
+                            className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100"
+                          >
+                            Enviar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}
