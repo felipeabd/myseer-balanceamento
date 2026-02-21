@@ -1,4 +1,4 @@
-# Frontend - IRIS Balanceamento Chat UI
+# Frontend - IRIS Chat UI
 FROM node:22-alpine AS builder
 
 WORKDIR /app

@@ -252,6 +252,84 @@ export class AgentRegistry {
     return this.updateAgent(id, { status: 'testando' });
   }
 
+  // ── Versioning ──────────────────────────────────────────
+
+  /** List all versions of an agent (without FINAL to see history) */
+  async getAgentVersions(id: string): Promise<Array<{ versao: number; atualizadoEm: string; nome: string; status: string }>> {
+    const rows = await this.clickhouse.rawQuery(
+      `SELECT versao, atualizado_em, nome, status
+       FROM ia_agentes
+       WHERE id = '${escapeStr(id)}'
+       ORDER BY versao DESC`
+    );
+    return rows.map(r => ({
+      versao: Number(r.versao),
+      atualizadoEm: String(r.atualizado_em),
+      nome: r.nome as string,
+      status: r.status as string,
+    }));
+  }
+
+  /** Rollback an agent to a specific version */
+  async rollbackAgent(id: string, targetVersion: number): Promise<AgentDefinition | null> {
+    // Get the current version (latest)
+    const current = await this.getAgentById(id);
+    if (!current) return null;
+
+    // Get the target version (without FINAL)
+    const rows = await this.clickhouse.rawQuery(
+      `SELECT * FROM ia_agentes
+       WHERE id = '${escapeStr(id)}' AND versao = ${targetVersion}
+       LIMIT 1`
+    );
+    if (rows.length === 0) return null;
+
+    const target = rowToAgent(rows[0]);
+
+    // Re-insert the old version with a new versao and atualizado_em
+    // This makes it the "current" version via ReplacingMergeTree
+    await this.clickhouse.execute(`
+      INSERT INTO ia_agentes (
+        id, slug, nome, descricao, icone, cor, saudacao, placeholder_input,
+        prompt_personalidade, prompt_tom, prompt_restricoes, prompt_exemplos, prompt_fluxo,
+        tabelas, habilidades, regras_analise, conhecimento, perguntas_rapidas,
+        modelo_padrao, max_tokens, temperatura, max_chamadas_ferramentas,
+        status, custo_mensal_brl, criado_por, versao, ordem, atualizado_em
+      ) VALUES (
+        '${id}',
+        '${escapeStr(target.slug)}',
+        '${escapeStr(target.nome)}',
+        '${escapeStr(target.descricao)}',
+        '${escapeStr(target.icone)}',
+        '${escapeStr(target.cor)}',
+        '${escapeStr(target.saudacao)}',
+        '${escapeStr(target.placeholderInput)}',
+        '${escapeStr(target.prompt.personalidade)}',
+        '${escapeStr(target.prompt.tom)}',
+        '${escapeStr(target.prompt.restricoes)}',
+        '${escapeStr(target.prompt.exemplos)}',
+        '${escapeStr(target.prompt.fluxo)}',
+        '${escapeStr(JSON.stringify(target.tabelas))}',
+        '${escapeStr(JSON.stringify(target.skills))}',
+        '${escapeStr(target.regraAnalise)}',
+        '${escapeStr(target.conhecimento)}',
+        '${escapeStr(JSON.stringify(target.perguntasRapidas))}',
+        '${escapeStr(target.modeloPadrao)}',
+        ${target.maxTokens},
+        ${target.temperature},
+        ${target.maxToolCalls},
+        '${escapeStr(target.status)}',
+        ${target.custoMensalBrl},
+        '${escapeStr(target.criadoPor)}',
+        ${current.versao + 1},
+        ${target.ordem},
+        now()
+      )
+    `);
+
+    return this.getAgentById(id);
+  }
+
   /** Enable/disable an agent for a tenant */
   async setTenantAgent(tenantId: string, agentId: string, habilitado: boolean): Promise<void> {
     await this.clickhouse.execute(`

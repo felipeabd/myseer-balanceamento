@@ -1,22 +1,22 @@
-# Token Usage Tracking
+# Rastreamento de Uso de Tokens
 
-Sistema de monitoramento de uso de tokens e custos do agente Iris Balanceamento.
+Sistema de monitoramento de uso de tokens e custos do agente Iris.
 
-## 📊 O que é rastreado?
+## O que é rastreado?
 
-Para cada interação com o agente, salvamos:
-- **Timestamp**: quando ocorreu
-- **Tenant ID**: qual cliente
-- **User Email**: qual usuário
-- **Conversation ID**: qual conversa
-- **Model**: qual modelo da Anthropic foi usado
-- **Input Tokens**: tokens enviados
-- **Output Tokens**: tokens recebidos
-- **Total Tokens**: soma dos dois
-- **Cost USD**: custo estimado em dólares
-- **Endpoint**: chat ou stream
+Para cada interação com o agente, salvamos na tabela `ia_uso_tokens`:
+- **data_hora**: quando ocorreu
+- **tenant_id**: qual cliente
+- **email_usuario**: qual usuário
+- **conversa_id**: qual conversa
+- **modelo**: qual modelo da Anthropic foi usado
+- **tokens_entrada**: tokens enviados
+- **tokens_saida**: tokens recebidos
+- **tokens_total**: soma dos dois
+- **custo_usd**: custo estimado em dólares
+- **endpoint**: chat ou stream
 
-## 🚀 Setup
+## Setup
 
 A tabela já foi criada automaticamente. Se precisar recriar:
 
@@ -24,7 +24,7 @@ A tabela já foi criada automaticamente. Se precisar recriar:
 npm run setup:tracking
 ```
 
-## 📈 Endpoints de Métricas
+## Endpoints de Métricas
 
 ### 1. Métricas do Tenant
 
@@ -82,7 +82,7 @@ Headers:
 }
 ```
 
-## 💰 Custos por Modelo (por 1M tokens)
+## Custos por Modelo (por 1M tokens)
 
 | Modelo | Input | Output |
 |--------|-------|--------|
@@ -91,37 +91,37 @@ Headers:
 | **Claude Haiku 4.5** | **$1.00** | **$5.00** |
 | Claude Haiku 3.5 | $0.25 | $1.25 |
 
-💡 **Dica**: Use Haiku 4.5 para economizar! É 3x mais barato que Sonnet.
+**Dica**: Use Haiku 4.5 para economizar! É 3x mais barato que Sonnet.
 
-## 📊 Queries Úteis no ClickHouse
+## Queries Úteis no ClickHouse
 
 ### Consumo Total por Tenant
 
 ```sql
 SELECT
     tenant_id,
-    sum(total_tokens) as total_tokens,
-    sum(cost_usd) as total_cost_usd
-FROM ia_usage_tokens
-WHERE date >= today() - INTERVAL 30 DAY
+    sum(tokens_total) as tokens_total,
+    sum(custo_usd) as custo_total_usd
+FROM ia_uso_tokens
+WHERE data >= today() - INTERVAL 30 DAY
 GROUP BY tenant_id
-ORDER BY total_cost_usd DESC;
+ORDER BY custo_total_usd DESC;
 ```
 
 ### Top 10 Conversas Mais Caras
 
 ```sql
 SELECT
-    conversation_id,
+    conversa_id,
     tenant_id,
-    user_email,
-    sum(total_tokens) as total_tokens,
-    sum(cost_usd) as total_cost_usd,
-    count(*) as messages
-FROM ia_usage_tokens
-WHERE date >= today() - INTERVAL 7 DAY
-GROUP BY conversation_id, tenant_id, user_email
-ORDER BY total_cost_usd DESC
+    email_usuario,
+    sum(tokens_total) as tokens_total,
+    sum(custo_usd) as custo_total_usd,
+    count(*) as mensagens
+FROM ia_uso_tokens
+WHERE data >= today() - INTERVAL 7 DAY
+GROUP BY conversa_id, tenant_id, email_usuario
+ORDER BY custo_total_usd DESC
 LIMIT 10;
 ```
 
@@ -129,33 +129,33 @@ LIMIT 10;
 
 ```sql
 SELECT
-    date,
-    sum(input_tokens) as input_tokens,
-    sum(output_tokens) as output_tokens,
-    sum(total_tokens) as total_tokens,
-    sum(cost_usd) as cost_usd
-FROM ia_usage_tokens
-WHERE date >= today() - INTERVAL 30 DAY
-GROUP BY date
-ORDER BY date;
+    data,
+    sum(tokens_entrada) as tokens_entrada,
+    sum(tokens_saida) as tokens_saida,
+    sum(tokens_total) as tokens_total,
+    sum(custo_usd) as custo_usd
+FROM ia_uso_tokens
+WHERE data >= today() - INTERVAL 30 DAY
+GROUP BY data
+ORDER BY data;
 ```
 
 ### Comparação de Modelos
 
 ```sql
 SELECT
-    model,
-    count(*) as requests,
-    sum(total_tokens) as total_tokens,
-    sum(cost_usd) as total_cost_usd,
-    avg(cost_usd) as avg_cost_per_request
-FROM ia_usage_tokens
-WHERE date >= today() - INTERVAL 30 DAY
-GROUP BY model
-ORDER BY total_cost_usd DESC;
+    modelo,
+    count(*) as requisicoes,
+    sum(tokens_total) as tokens_total,
+    sum(custo_usd) as custo_total_usd,
+    avg(custo_usd) as custo_medio_por_requisicao
+FROM ia_uso_tokens
+WHERE data >= today() - INTERVAL 30 DAY
+GROUP BY modelo
+ORDER BY custo_total_usd DESC;
 ```
 
-## 🎯 Próximos Passos
+## Próximos Passos
 
 - [ ] Dashboard visual (Grafana/Metabase)
 - [ ] Alertas de custo (quando atingir limite)
@@ -163,7 +163,7 @@ ORDER BY total_cost_usd DESC;
 - [ ] Relatórios mensais automáticos
 - [ ] Otimização de prompts baseada em uso
 
-## 🔍 Monitoramento em Tempo Real
+## Monitoramento em Tempo Real
 
 Os dados são salvos automaticamente após cada interação. Você pode:
 
@@ -172,7 +172,7 @@ Os dados são salvos automaticamente após cada interação. Você pode:
 3. Integrar com seu dashboard existente
 4. Exportar para análise
 
-## ⚠️ Importante
+## Importante
 
 - O tracking NÃO afeta performance (async)
 - Se falhar, não quebra a aplicação

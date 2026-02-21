@@ -41,6 +41,13 @@ export interface AgentDefinitionFull {
   versao: number;
 }
 
+export interface AgentVersion {
+  versao: number;
+  atualizadoEm: string;
+  nome: string;
+  status: string;
+}
+
 export interface TableInfo {
   name: string;
   engine: string;
@@ -118,6 +125,25 @@ export class BuilderApiService {
     const res = await fetch(`${API_BASE_URL}/api/builder/agents/${id}/unpublish`, {
       method: 'PUT',
       headers: this.getHeaders(),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  // ── Versioning ─────────────────────────────────────────
+
+  async getAgentVersions(id: string): Promise<AgentVersion[]> {
+    const res = await fetch(`${API_BASE_URL}/api/builder/agents/${id}/versions`, { headers: this.getHeaders() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.versions;
+  }
+
+  async rollbackAgent(id: string, versao: number): Promise<AgentDefinitionFull> {
+    const res = await fetch(`${API_BASE_URL}/api/builder/agents/${id}/rollback`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ versao }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();

@@ -1,103 +1,103 @@
--- Central logging table for all AI agents
-CREATE TABLE IF NOT EXISTS ia_agents_log (
-    timestamp DateTime DEFAULT now(),
+-- Tabela centralizada de log de conversas para todos os agentes de IA
+CREATE TABLE IF NOT EXISTS ia_log_agentes (
+    data_hora DateTime DEFAULT now(),
 
-    -- Identification
-    agent LowCardinality(String),  -- 'iris_balanceamento', 'iris_compras', etc
+    -- Identificação
+    agente LowCardinality(String),  -- 'iris', 'iris_compras', etc
     tenant_id String,
-    user_email String,
-    conversation_id String,
-    message_id String,
+    email_usuario String,
+    conversa_id String,
+    mensagem_id String,
 
-    -- Input
-    user_question String,
+    -- Entrada
+    pergunta_usuario String,
 
-    -- Output
-    response_summary String,  -- First 500 chars of response
-    response_type LowCardinality(String),  -- 'discovery', 'analysis', 'plan', 'error', 'greeting'
+    -- Saída
+    resumo_resposta String,  -- Primeiros 500 chars da resposta
+    tipo_resposta LowCardinality(String),  -- 'discovery', 'analysis', 'plan', 'error', 'greeting'
 
-    -- Technical tracking
-    tools_used Array(String),
-    sql_queries Array(String),
+    -- Rastreamento técnico
+    ferramentas_usadas Array(String),
+    consultas_sql Array(String),
 
-    -- Business context (flexible for all agents)
-    business_entities Map(String, Array(String)),  -- products, stores, suppliers, etc
-    keywords Array(String),
+    -- Contexto de negócio (flexível para todos os agentes)
+    entidades_negocio Map(String, Array(String)),  -- produtos, lojas, fornecedores, etc
+    palavras_chave Array(String),
 
-    -- Quality metrics
-    has_error UInt8,
-    response_time_ms UInt32,
+    -- Métricas de qualidade
+    tem_erro UInt8,
+    tempo_resposta_ms UInt32,
 
-    -- User feedback (updated later)
-    user_rating Int8 DEFAULT 0,  -- -1 (bad), 0 (neutral), 1 (good)
-    user_feedback String,
+    -- Feedback do usuário (atualizado depois)
+    avaliacao_usuario Int8 DEFAULT 0,  -- -1 (ruim), 0 (neutro), 1 (bom)
+    feedback_usuario String,
 
-    -- Agent-specific metadata (JSON for unique data)
-    agent_metadata String,
+    -- Metadados específicos do agente (JSON para dados únicos)
+    metadados_agente String,
 
-    date Date DEFAULT toDate(timestamp)
+    data Date DEFAULT toDate(data_hora)
 ) ENGINE = MergeTree()
-PARTITION BY (toYYYYMM(date), agent)
-ORDER BY (agent, tenant_id, date, timestamp);
+PARTITION BY (toYYYYMM(data), agente)
+ORDER BY (agente, tenant_id, data, data_hora);
 
--- Index for faster conversation queries
-ALTER TABLE ia_agents_log ADD INDEX idx_conversation_id conversation_id TYPE bloom_filter(0.01) GRANULARITY 1;
+-- Índice para consultas de conversa mais rápidas
+ALTER TABLE ia_log_agentes ADD INDEX idx_conversa_id conversa_id TYPE bloom_filter(0.01) GRANULARITY 1;
 
--- Example queries:
+-- Consultas de exemplo:
 
--- 1. Most common questions per agent
+-- 1. Perguntas mais comuns por agente
 -- SELECT
---     agent,
---     user_question,
---     count() as frequency
--- FROM ia_agents_log
--- WHERE date >= today() - 30
--- GROUP BY agent, user_question
--- ORDER BY agent, frequency DESC
+--     agente,
+--     pergunta_usuario,
+--     count() as frequencia
+-- FROM ia_log_agentes
+-- WHERE data >= today() - 30
+-- GROUP BY agente, pergunta_usuario
+-- ORDER BY agente, frequencia DESC
 -- LIMIT 20;
 
--- 2. Agent comparison
+-- 2. Comparação entre agentes
 -- SELECT
---     agent,
---     count() as total_requests,
---     avg(response_time_ms) as avg_response_time,
---     sum(has_error) as errors,
---     avg(user_rating) as avg_rating
--- FROM ia_agents_log
--- WHERE date >= today() - 30
--- GROUP BY agent;
+--     agente,
+--     count() as total_requisicoes,
+--     avg(tempo_resposta_ms) as tempo_medio_resposta,
+--     sum(tem_erro) as erros,
+--     avg(avaliacao_usuario) as avaliacao_media
+-- FROM ia_log_agentes
+-- WHERE data >= today() - 30
+-- GROUP BY agente;
 
--- 3. Error rate by agent
+-- 3. Taxa de erro por agente
 -- SELECT
---     agent,
---     date,
---     countIf(has_error = 1) as errors,
+--     agente,
+--     data,
+--     countIf(tem_erro = 1) as erros,
 --     count() as total,
---     (errors / total) * 100 as error_rate
--- FROM ia_agents_log
--- WHERE date >= today() - 30
--- GROUP BY agent, date
--- ORDER BY agent, date;
+--     (erros / total) * 100 as taxa_erro
+-- FROM ia_log_agentes
+-- WHERE data >= today() - 30
+-- GROUP BY agente, data
+-- ORDER BY agente, data;
 
--- 4. Most queried business entities (products, stores, etc)
+-- 4. Entidades de negócio mais consultadas (produtos, lojas, etc)
 -- SELECT
---     agent,
---     arrayJoin(business_entities.values) as entities,
---     count() as frequency
--- FROM ia_agents_log
--- WHERE date >= today() - 7
--- GROUP BY agent, entities
--- ORDER BY agent, frequency DESC
+--     agente,
+--     arrayJoin(entidades_negocio.values) as entidades,
+--     count() as frequencia
+-- FROM ia_log_agentes
+-- WHERE data >= today() - 7
+-- GROUP BY agente, entidades
+-- ORDER BY agente, frequencia DESC
 -- LIMIT 50;
 
--- 5. Conversation drill-down
+-- 5. Drill-down de conversa
 -- SELECT
---     timestamp,
---     user_question,
---     response_summary,
---     response_type,
---     tools_used,
---     response_time_ms
--- FROM ia_agents_log
--- WHERE conversation_id = 'your-conversation-id'
--- ORDER BY timestamp;
+--     data_hora,
+--     pergunta_usuario,
+--     resumo_resposta,
+--     tipo_resposta,
+--     ferramentas_usadas,
+--     tempo_resposta_ms
+-- FROM ia_log_agentes
+-- WHERE conversa_id = 'seu-id-de-conversa'
+-- ORDER BY data_hora;

@@ -1,4 +1,4 @@
-# 📚 Base de Conhecimento - Iris Balanceamento
+# 📚 Base de Conhecimento - Iris
 
 ## O que é?
 

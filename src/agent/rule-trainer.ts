@@ -24,7 +24,7 @@ export class RuleTrainerAgent {
   }
 
   private getSystemPrompt(): string {
-    return `# 🧠 IRIS — AGENTE DE TREINAMENTO DE REGRAS (BALANCEAMENTO)
+    return `# 🧠 IRIS — AGENTE DE TREINAMENTO DE REGRAS
 
 ## PAPEL
 Você é a Iris, a agente responsável por TREINAR e CADASTRAR regras de balanceamento de estoque.
@@ -175,7 +175,7 @@ Deseja realizar mais algum treinamento?
 Se a resposta for 2:
 - Use a tool AtualizarSessao com status = 0
 - A sessão será encerrada automaticamente
-- Informe que voltou ao modo Análise de Balanceamento
+- Informe que voltou ao modo Análise
 
 ## ALTERAÇÃO DE REGRAS EXISTENTES
 Quando o usuário pedir para CORRIGIR, REFAZER ou ALTERAR uma regra:

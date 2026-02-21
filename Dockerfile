@@ -1,4 +1,4 @@
-# Backend - IRIS Balanceamento API
+# Backend - IRIS API
 FROM node:22-alpine AS builder
 
 WORKDIR /app

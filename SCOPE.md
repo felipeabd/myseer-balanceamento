@@ -1,4 +1,4 @@
-# Escopo do Projeto - Iris Balanceamento
+# Escopo do Projeto - Iris
 
 ## Objetivo
 Criar um agente conversacional para análise de balanceamento de estoque que seja integrado à aplicação web existente.

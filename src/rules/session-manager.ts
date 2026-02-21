@@ -4,7 +4,7 @@ export interface TrainingSession {
   conversationId: string;
   tenantId: string;
   userEmail: string;
-  agentMode: 'rule_trainer' | 'iris_balanceamento';
+  agentMode: 'rule_trainer' | 'iris';
   status: 0 | 1; // 0 = normal, 1 = treinamento
   startedAt: Date;
   endedAt?: Date;
@@ -20,17 +20,17 @@ export class SessionManager {
   async getActiveSession(conversationId: string): Promise<TrainingSession | null> {
     const query = `
       SELECT
-        conversation_id as conversationId,
+        conversa_id as conversationId,
         tenant_id as tenantId,
-        user_email as userEmail,
-        agent_mode as agentMode,
+        email_usuario as userEmail,
+        modo_agente as agentMode,
         status,
-        started_at as startedAt,
-        ended_at as endedAt,
-        last_activity as lastActivity
+        iniciado_em as startedAt,
+        encerrado_em as endedAt,
+        ultima_atividade as lastActivity
       FROM ia_sessoes_regras
-      WHERE conversation_id = '${conversationId}'
-      ORDER BY last_activity DESC
+      WHERE conversa_id = '${conversationId}'
+      ORDER BY ultima_atividade DESC
       LIMIT 1
     `;
 
@@ -53,12 +53,12 @@ export class SessionManager {
   ): Promise<void> {
     const query = `
       INSERT INTO ia_sessoes_regras (
-        conversation_id,
+        conversa_id,
         tenant_id,
-        user_email,
-        agent_mode,
+        email_usuario,
+        modo_agente,
         status,
-        started_at
+        iniciado_em
       ) VALUES (
         '${conversationId}',
         '${tenantId}',
@@ -80,23 +80,23 @@ export class SessionManager {
     const session = await this.getActiveSession(conversationId);
 
     if (!session) {
-      throw new Error(`Sessão não encontrada para conversation_id: ${conversationId}`);
+      throw new Error(`Sessão não encontrada para conversa_id: ${conversationId}`);
     }
 
     const query = `
       INSERT INTO ia_sessoes_regras (
-        conversation_id,
+        conversa_id,
         tenant_id,
-        user_email,
-        agent_mode,
+        email_usuario,
+        modo_agente,
         status,
-        started_at,
-        ended_at
+        iniciado_em,
+        encerrado_em
       ) VALUES (
         '${conversationId}',
         '${session.tenantId}',
         '${session.userEmail}',
-        'iris_balanceamento',
+        'iris',
         0,
         '${new Date(session.startedAt).toISOString().slice(0, 19).replace('T', ' ')}',
         now()

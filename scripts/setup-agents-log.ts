@@ -31,7 +31,7 @@ async function setupAgentsLog() {
       }
     }
 
-    console.log('✅ Table ia_agents_log created successfully!');
+    console.log('✅ Table ia_log_agentes created successfully!');
     console.log('');
     console.log('You can now track conversations from all AI agents.');
     console.log('Check the SQL file for example queries.');

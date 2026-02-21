@@ -10,7 +10,7 @@ async function checkTable() {
   });
 
   try {
-    console.log('🔍 Checking for ia_usage_tokens table...\n');
+    console.log('🔍 Checking for ia_uso_tokens table...\n');
 
     // Check if table exists
     const query = `
@@ -20,38 +20,38 @@ async function checkTable() {
         create_table_query
       FROM system.tables
       WHERE database = '${process.env.CLICKHOUSE_DATABASE ?? 'default'}'
-        AND name = 'ia_usage_tokens'
+        AND name = 'ia_uso_tokens'
     `;
 
     const result = await clickhouse.query(query, { tenantId: '', userEmail: '' });
 
     if (result.length === 0) {
-      console.log('❌ Table ia_usage_tokens NOT FOUND');
+      console.log('❌ Table ia_uso_tokens NOT FOUND');
       console.log('\nTrying to create it now...\n');
 
       // Try to create the table
       const createTableSQL = `
-        CREATE TABLE IF NOT EXISTS ia_usage_tokens (
-          timestamp DateTime DEFAULT now(),
+        CREATE TABLE IF NOT EXISTS ia_uso_tokens (
+          data_hora DateTime DEFAULT now(),
           tenant_id String,
-          user_email String,
-          conversation_id String,
-          model String,
-          input_tokens UInt32,
-          output_tokens UInt32,
-          total_tokens UInt32,
-          cost_usd Float32,
+          email_usuario String,
+          conversa_id String,
+          modelo String,
+          tokens_entrada UInt32,
+          tokens_saida UInt32,
+          tokens_total UInt32,
+          custo_usd Float32,
           endpoint String,
-          date Date DEFAULT toDate(timestamp)
+          data Date DEFAULT toDate(data_hora)
         ) ENGINE = MergeTree()
-        PARTITION BY toYYYYMM(date)
-        ORDER BY (tenant_id, date, timestamp)
+        PARTITION BY toYYYYMM(data)
+        ORDER BY (tenant_id, data, data_hora)
       `;
 
       await clickhouse.execute(createTableSQL);
       console.log('✅ Table created successfully!');
     } else {
-      console.log('✅ Table ia_usage_tokens EXISTS');
+      console.log('✅ Table ia_uso_tokens EXISTS');
       console.log('\nTable info:');
       console.log(JSON.stringify(result[0], null, 2));
     }

@@ -60,6 +60,12 @@ export function BuilderLayout({ userEmail, onExit }: BuilderLayoutProps) {
     setAgents(prev => prev.map(a => a.id === id ? unpublished : a));
   };
 
+  const handleRollback = async (id: string, versao: number) => {
+    const restored = await api.rollbackAgent(id, versao);
+    setAgents(prev => prev.map(a => a.id === id ? restored : a));
+    return restored;
+  };
+
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || null;
 
   const statusColor = (status: string) => {
@@ -145,12 +151,13 @@ export function BuilderLayout({ userEmail, onExit }: BuilderLayoutProps) {
       <div className="flex-1 overflow-hidden">
         {selectedAgent ? (
           <AgentEditor
-            key={selectedAgent.id}
+            key={`${selectedAgent.id}-${selectedAgent.versao}`}
             agent={selectedAgent}
             api={api}
             onSave={handleSave}
             onPublish={handlePublish}
             onUnpublish={handleUnpublish}
+            onRollback={handleRollback}
           />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">

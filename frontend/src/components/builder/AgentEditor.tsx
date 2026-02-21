@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { BuilderApiService, type AgentDefinitionFull } from '../../services/builder-api';
+import { useState, useEffect } from 'react';
+import { BuilderApiService, type AgentDefinitionFull, type AgentVersion } from '../../services/builder-api';
 import { TestChat } from './TestChat';
 import { TableSelector } from './TableSelector';
 import { StarterPromptsEditor } from './StarterPromptsEditor';
@@ -10,11 +10,12 @@ interface AgentEditorProps {
   onSave: (id: string, data: Partial<AgentDefinitionFull>) => Promise<AgentDefinitionFull>;
   onPublish: (id: string) => Promise<void>;
   onUnpublish: (id: string) => Promise<void>;
+  onRollback: (id: string, versao: number) => Promise<AgentDefinitionFull>;
 }
 
-type Tab = 'basico' | 'prompt' | 'tabelas' | 'skills' | 'regras' | 'conhecimento' | 'perguntas' | 'config' | 'teste';
+type Tab = 'basico' | 'prompt' | 'tabelas' | 'skills' | 'regras' | 'conhecimento' | 'perguntas' | 'config' | 'historico' | 'teste';
 
-export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish }: AgentEditorProps) {
+export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRollback }: AgentEditorProps) {
   const [tab, setTab] = useState<Tab>('basico');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -84,6 +85,7 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish }: Agen
     { key: 'conhecimento', label: 'Conhecimento' },
     { key: 'perguntas', label: 'Perguntas' },
     { key: 'config', label: 'Config' },
+    { key: 'historico', label: 'Historico' },
     { key: 'teste', label: 'Testar' },
   ];
 
@@ -282,6 +284,15 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish }: Agen
             </div>
           )}
 
+          {tab === 'historico' && (
+            <VersionHistory
+              agentId={agent.id}
+              currentVersion={agent.versao}
+              api={api}
+              onRollback={async (versao) => { await onRollback(agent.id, versao); }}
+            />
+          )}
+
           {tab === 'teste' && (
             <TestChat agentId={agent.id} agentNome={agent.nome} api={api} />
           )}
@@ -343,5 +354,98 @@ function Toggle({ label, checked, onChange }: {
       </div>
       <span className="text-sm text-gray-700">{label}</span>
     </label>
+  );
+}
+
+function VersionHistory({ agentId, currentVersion, api, onRollback }: {
+  agentId: string;
+  currentVersion: number;
+  api: BuilderApiService;
+  onRollback: (versao: number) => Promise<void>;
+}) {
+  const [versions, setVersions] = useState<AgentVersion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [rolling, setRolling] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.getAgentVersions(agentId).then(v => {
+      setVersions(v);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [agentId, api]);
+
+  const handleRollback = async (versao: number) => {
+    if (!confirm(`Restaurar para a versao ${versao}? A versao atual sera mantida no historico.`)) return;
+    setRolling(versao);
+    try {
+      await onRollback(versao);
+    } catch (error) {
+      alert('Erro ao restaurar: ' + (error as Error).message);
+      setRolling(null);
+    }
+  };
+
+  const statusBadge = (status: string) => {
+    switch (status) {
+      case 'publicado': return 'bg-green-100 text-green-700';
+      case 'testando': return 'bg-yellow-100 text-yellow-700';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  if (loading) return <p className="text-sm text-gray-400">Carregando historico...</p>;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-500">
+        Historico de versoes do agente. Versao atual: <strong>v{currentVersion}</strong>
+      </p>
+
+      {versions.length === 0 && (
+        <p className="text-sm text-gray-400">Nenhuma versao encontrada.</p>
+      )}
+
+      {versions.map(v => {
+        const isCurrent = v.versao === currentVersion;
+        const date = new Date(v.atualizadoEm);
+        const formatted = date.toLocaleString('pt-BR', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        });
+
+        return (
+          <div
+            key={v.versao}
+            className={`border rounded-lg p-3 flex items-center justify-between ${
+              isCurrent ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className={`text-sm font-bold ${isCurrent ? 'text-blue-600' : 'text-gray-700'}`}>
+                v{v.versao}
+              </span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusBadge(v.status)}`}>
+                {v.status}
+              </span>
+              <span className="text-xs text-gray-400">{formatted}</span>
+              {isCurrent && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-600 font-medium">
+                  atual
+                </span>
+              )}
+            </div>
+            {!isCurrent && (
+              <button
+                onClick={() => handleRollback(v.versao)}
+                disabled={rolling !== null}
+                className="px-3 py-1 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+              >
+                {rolling === v.versao ? 'Restaurando...' : 'Restaurar'}
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }

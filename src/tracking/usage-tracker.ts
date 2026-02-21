@@ -42,15 +42,15 @@ export class UsageTracker {
     const costUsd = this.calculateCost(usage.model, usage.inputTokens, usage.outputTokens);
 
     const query = `
-      INSERT INTO ia_usage_tokens (
+      INSERT INTO ia_uso_tokens (
         tenant_id,
-        user_email,
-        conversation_id,
-        model,
-        input_tokens,
-        output_tokens,
-        total_tokens,
-        cost_usd,
+        email_usuario,
+        conversa_id,
+        modelo,
+        tokens_entrada,
+        tokens_saida,
+        tokens_total,
+        custo_usd,
         endpoint
       ) VALUES (
         '${usage.tenantId}',
@@ -103,15 +103,15 @@ export class UsageTracker {
 
     const query = `
       SELECT
-        sum(input_tokens) as inputTokens,
-        sum(output_tokens) as outputTokens,
-        sum(total_tokens) as totalTokens,
-        sum(cost_usd) as estimatedCostUSD,
+        sum(tokens_entrada) as inputTokens,
+        sum(tokens_saida) as outputTokens,
+        sum(tokens_total) as totalTokens,
+        sum(custo_usd) as estimatedCostUSD,
         count(*) as requestCount
-      FROM ia_usage_tokens
+      FROM ia_uso_tokens
       WHERE tenant_id = '${tenantId}'
-        AND timestamp >= '${start.toISOString().slice(0, 19).replace('T', ' ')}'
-        AND timestamp <= '${end.toISOString().slice(0, 19).replace('T', ' ')}'
+        AND data_hora >= '${start.toISOString().slice(0, 19).replace('T', ' ')}'
+        AND data_hora <= '${end.toISOString().slice(0, 19).replace('T', ' ')}'
     `;
 
     const rows = await this.clickhouse.query(query, { tenantId, userEmail: '' });
@@ -135,13 +135,13 @@ export class UsageTracker {
   async getConversationMetrics(conversationId: string): Promise<UsageMetrics> {
     const query = `
       SELECT
-        sum(input_tokens) as inputTokens,
-        sum(output_tokens) as outputTokens,
-        sum(total_tokens) as totalTokens,
-        sum(cost_usd) as estimatedCostUSD,
+        sum(tokens_entrada) as inputTokens,
+        sum(tokens_saida) as outputTokens,
+        sum(tokens_total) as totalTokens,
+        sum(custo_usd) as estimatedCostUSD,
         count(*) as requestCount
-      FROM ia_usage_tokens
-      WHERE conversation_id = '${conversationId}'
+      FROM ia_uso_tokens
+      WHERE conversa_id = '${conversationId}'
     `;
 
     const rows = await this.clickhouse.query(query, { tenantId: '', userEmail: '' });
@@ -168,14 +168,14 @@ export class UsageTracker {
   ): Promise<Array<{ date: string; totalTokens: number; costUsd: number }>> {
     const query = `
       SELECT
-        toDate(timestamp) as date,
-        sum(total_tokens) as totalTokens,
-        sum(cost_usd) as costUsd
-      FROM ia_usage_tokens
+        toDate(data_hora) as data,
+        sum(tokens_total) as totalTokens,
+        sum(custo_usd) as costUsd
+      FROM ia_uso_tokens
       WHERE tenant_id = '${tenantId}'
-        AND date >= today() - INTERVAL ${days} DAY
-      GROUP BY date
-      ORDER BY date DESC
+        AND data >= today() - INTERVAL ${days} DAY
+      GROUP BY data
+      ORDER BY data DESC
     `;
 
     return await this.clickhouse.query(query, { tenantId, userEmail: '' }) as unknown as Array<{ date: string; totalTokens: number; costUsd: number }>;

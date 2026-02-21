@@ -31,7 +31,7 @@ async function setupUsageTracking() {
       }
     }
 
-    console.log('✅ Table ia_usage_tokens created successfully!');
+    console.log('✅ Table ia_uso_tokens created successfully!');
     console.log('');
     console.log('You can now track token usage and costs.');
     console.log('Check the SQL file for example queries.');

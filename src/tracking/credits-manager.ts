@@ -29,33 +29,33 @@ export class CreditsManager {
     this.clickhouse = clickhouse;
   }
 
-  /** Create ia_tenant_credits table and add markup column if needed */
+  /** Create ia_creditos_tenant table and add markup column if needed */
   async ensureTable(): Promise<void> {
     try {
       await this.clickhouse.execute(`
-        CREATE TABLE IF NOT EXISTS ia_tenant_credits (
+        CREATE TABLE IF NOT EXISTS ia_creditos_tenant (
           tenant_id String,
-          contracted_brl Float64,
-          usd_to_brl_rate Float64,
-          updated_at DateTime DEFAULT now()
-        ) ENGINE = ReplacingMergeTree(updated_at)
+          contratado_brl Float64,
+          taxa_usd_brl Float64,
+          atualizado_em DateTime DEFAULT now()
+        ) ENGINE = ReplacingMergeTree(atualizado_em)
         ORDER BY tenant_id
       `);
-      // Add markup_multiplier column if not yet present (safe to run multiple times)
+      // Add multiplicador_markup column if not yet present (safe to run multiple times)
       await this.clickhouse.execute(`
-        ALTER TABLE ia_tenant_credits
-        ADD COLUMN IF NOT EXISTS markup_multiplier Float64 DEFAULT ${DEFAULT_MARKUP}
+        ALTER TABLE ia_creditos_tenant
+        ADD COLUMN IF NOT EXISTS multiplicador_markup Float64 DEFAULT ${DEFAULT_MARKUP}
       `);
       // Recharge history table — append-only, one row per recharge
       await this.clickhouse.execute(`
-        CREATE TABLE IF NOT EXISTS ia_tenant_credits_recharges (
+        CREATE TABLE IF NOT EXISTS ia_recargas_creditos (
           tenant_id String,
-          amount_brl Float64,
-          recharged_at DateTime DEFAULT now()
+          valor_brl Float64,
+          recarregado_em DateTime DEFAULT now()
         ) ENGINE = MergeTree()
-        ORDER BY (tenant_id, recharged_at)
+        ORDER BY (tenant_id, recarregado_em)
       `);
-      console.log('[CreditsManager] Tables ia_tenant_credits + ia_tenant_credits_recharges ready');
+      console.log('[CreditsManager] Tables ia_creditos_tenant + ia_recargas_creditos ready');
       await this.migrateHistoricalRecharges();
     } catch (error) {
       console.error('[CreditsManager] Failed to ensure table:', error);
@@ -63,73 +63,73 @@ export class CreditsManager {
   }
 
   /**
-   * One-time migration: reads ia_tenant_credits (all rows, no FINAL), computes
-   * per-recharge deltas, and inserts into ia_tenant_credits_recharges any rows
+   * One-time migration: reads ia_creditos_tenant (all rows, no FINAL), computes
+   * per-recharge deltas, and inserts into ia_recargas_creditos any rows
    * not yet present (matched by timestamp). Safe to call multiple times.
    */
   private async migrateHistoricalRecharges(): Promise<void> {
     try {
       const creditsRows = await this.clickhouse.rawQuery(`
-        SELECT tenant_id, contracted_brl, toString(updated_at) as ts
-        FROM ia_tenant_credits
-        ORDER BY tenant_id, updated_at ASC
+        SELECT tenant_id, contratado_brl, toString(atualizado_em) as ts
+        FROM ia_creditos_tenant
+        ORDER BY tenant_id, atualizado_em ASC
       `);
       if (creditsRows.length === 0) return;
 
       const rechargesRows = await this.clickhouse.rawQuery(`
-        SELECT toString(recharged_at) as ts FROM ia_tenant_credits_recharges
+        SELECT toString(recarregado_em) as ts FROM ia_recargas_creditos
       `);
       const migratedTs = new Set((rechargesRows as any[]).map(r => String(r.ts)));
 
       // Group by tenant and compute deltas
-      const byTenant = new Map<string, Array<{ contracted_brl: number; ts: string }>>();
+      const byTenant = new Map<string, Array<{ contratado_brl: number; ts: string }>>();
       for (const row of creditsRows as any[]) {
         const tid = String(row.tenant_id);
         if (!byTenant.has(tid)) byTenant.set(tid, []);
-        byTenant.get(tid)!.push({ contracted_brl: Number(row.contracted_brl), ts: String(row.ts) });
+        byTenant.get(tid)!.push({ contratado_brl: Number(row.contratado_brl), ts: String(row.ts) });
       }
 
       let migrated = 0;
       for (const [tenantId, rows] of byTenant) {
         for (let i = 0; i < rows.length; i++) {
-          const { ts, contracted_brl } = rows[i];
+          const { ts, contratado_brl } = rows[i];
           if (migratedTs.has(ts)) continue; // already in history table
-          const prevBrl = i === 0 ? 0 : rows[i - 1].contracted_brl;
-          const amountBrl = contracted_brl - prevBrl;
+          const prevBrl = i === 0 ? 0 : rows[i - 1].contratado_brl;
+          const valorBrl = contratado_brl - prevBrl;
           await this.clickhouse.execute(`
-            INSERT INTO ia_tenant_credits_recharges (tenant_id, amount_brl, recharged_at)
-            VALUES ('${tenantId}', ${amountBrl}, '${ts}')
+            INSERT INTO ia_recargas_creditos (tenant_id, valor_brl, recarregado_em)
+            VALUES ('${tenantId}', ${valorBrl}, '${ts}')
           `);
           migrated++;
         }
       }
 
       if (migrated > 0) {
-        console.log(`[CreditsManager] Migrated ${migrated} historical recharge(s) → ia_tenant_credits_recharges`);
+        console.log(`[CreditsManager] Migrated ${migrated} historical recharge(s) → ia_recargas_creditos`);
       }
     } catch (error) {
       console.error('[CreditsManager] Failed to migrate historical recharges:', error);
     }
   }
 
-  /** Get recharge history for a tenant from ia_tenant_credits_recharges, filtered by month (YYYY-MM). */
+  /** Get recharge history for a tenant from ia_recargas_creditos, filtered by month (YYYY-MM). */
   async getRecharges(tenantId: string, month?: string): Promise<RechargeRecord[]> {
     const monthFilter = month
-      ? `AND toYYYYMM(recharged_at) = ${month.replace('-', '')}`
+      ? `AND toYYYYMM(recarregado_em) = ${month.replace('-', '')}`
       : '';
     const rows = await this.clickhouse.rawQuery(`
       SELECT
         rowNumberInAllBlocks() + 1 as id,
-        amount_brl,
-        toString(recharged_at) as ts
-      FROM ia_tenant_credits_recharges
+        valor_brl,
+        toString(recarregado_em) as ts
+      FROM ia_recargas_creditos
       WHERE tenant_id = '${tenantId}'
         ${monthFilter}
-      ORDER BY recharged_at DESC
+      ORDER BY recarregado_em DESC
     `);
     return (rows as any[]).map(r => ({
       id: Number(r.id),
-      amountBrl: Number(r.amount_brl),
+      amountBrl: Number(r.valor_brl),
       rechargedAt: String(r.ts),
     }));
   }
@@ -138,16 +138,16 @@ export class CreditsManager {
   private async getConfig(tenantId: string): Promise<{ contractedBrl: number; rate: number; markup: number }> {
     try {
       const rows = await this.clickhouse.rawQuery(`
-        SELECT contracted_brl, usd_to_brl_rate, markup_multiplier
-        FROM ia_tenant_credits FINAL
+        SELECT contratado_brl, taxa_usd_brl, multiplicador_markup
+        FROM ia_creditos_tenant FINAL
         WHERE tenant_id = '${tenantId}'
         LIMIT 1
       `);
       if (rows.length > 0) {
         return {
-          contractedBrl: Number(rows[0].contracted_brl) || 0,
-          rate: Number(rows[0].usd_to_brl_rate) || DEFAULT_EXCHANGE_RATE,
-          markup: Number(rows[0].markup_multiplier) || DEFAULT_MARKUP,
+          contractedBrl: Number(rows[0].contratado_brl) || 0,
+          rate: Number(rows[0].taxa_usd_brl) || DEFAULT_EXCHANGE_RATE,
+          markup: Number(rows[0].multiplicador_markup) || DEFAULT_MARKUP,
         };
       }
     } catch (error) {
@@ -160,12 +160,12 @@ export class CreditsManager {
   private async getUsedBrl(tenantId: string, rate: number, markup: number): Promise<number> {
     try {
       const rows = await this.clickhouse.rawQuery(`
-        SELECT SUM(cost_usd) as total_cost
-        FROM ia_usage_tokens
+        SELECT SUM(custo_usd) as custo_total
+        FROM ia_uso_tokens
         WHERE tenant_id = '${tenantId}'
       `);
-      if (rows.length > 0 && rows[0].total_cost != null) {
-        return Number(rows[0].total_cost) * rate * markup;
+      if (rows.length > 0 && rows[0].custo_total != null) {
+        return Number(rows[0].custo_total) * rate * markup;
       }
     } catch (error) {
       console.error('[CreditsManager] Failed to get used credits:', error);
@@ -178,17 +178,17 @@ export class CreditsManager {
     try {
       const rows = await this.clickhouse.rawQuery(`
         SELECT
-          toString(toDate(timestamp)) as date,
-          sum(total_tokens) as totalTokens,
-          sum(cost_usd) * ${rate} * ${markup} as costBrl
-        FROM ia_usage_tokens
+          toString(toDate(data_hora)) as data,
+          sum(tokens_total) as totalTokens,
+          sum(custo_usd) * ${rate} * ${markup} as costBrl
+        FROM ia_uso_tokens
         WHERE tenant_id = '${tenantId}'
-          AND toDate(timestamp) >= today() - INTERVAL ${days} DAY
-        GROUP BY date
-        ORDER BY date ASC
+          AND toDate(data_hora) >= today() - INTERVAL ${days} DAY
+        GROUP BY data
+        ORDER BY data ASC
       `);
       return rows.map(r => ({
-        date: String(r.date),
+        date: String(r.data),
         totalTokens: Number(r.totalTokens),
         costBrl: Number(r.costBrl),
       }));
@@ -203,16 +203,16 @@ export class CreditsManager {
     try {
       const rows = await this.clickhouse.rawQuery(`
         SELECT
-          toString(toHour(timestamp)) as hour,
-          sum(total_tokens) as totalTokens,
-          sum(cost_usd) * ${rate} * ${markup} as costBrl
-        FROM ia_usage_tokens
+          toString(toHour(data_hora)) as hora,
+          sum(tokens_total) as totalTokens,
+          sum(custo_usd) * ${rate} * ${markup} as costBrl
+        FROM ia_uso_tokens
         WHERE tenant_id = '${tenantId}'
-        GROUP BY hour
-        ORDER BY hour ASC
+        GROUP BY hora
+        ORDER BY hora ASC
       `);
       return rows.map(r => ({
-        hour: String(r.hour).padStart(2, '0') + 'h',
+        hour: String(r.hora).padStart(2, '0') + 'h',
         totalTokens: Number(r.totalTokens),
         costBrl: Number(r.costBrl),
       }));
@@ -227,17 +227,17 @@ export class CreditsManager {
     try {
       const rows = await this.clickhouse.rawQuery(`
         SELECT
-          user_email as userEmail,
-          sum(total_tokens) as totalTokens,
-          sum(cost_usd) * ${rate} * ${markup} as costBrl
-        FROM ia_usage_tokens
+          email_usuario as emailUsuario,
+          sum(tokens_total) as totalTokens,
+          sum(custo_usd) * ${rate} * ${markup} as costBrl
+        FROM ia_uso_tokens
         WHERE tenant_id = '${tenantId}'
-        GROUP BY user_email
+        GROUP BY email_usuario
         ORDER BY costBrl DESC
         LIMIT 20
       `);
       return rows.map(r => ({
-        userEmail: String(r.userEmail),
+        userEmail: String(r.emailUsuario),
         totalTokens: Number(r.totalTokens),
         costBrl: Number(r.costBrl),
       }));
@@ -264,11 +264,11 @@ export class CreditsManager {
   }> {
     const { rate, markup } = await this.getConfig(tenantId);
 
-    const hourlyDateFilter = date ? `AND toDate(timestamp) = '${date}'` : '';
-    const userFilter = userEmail ? `AND user_email = '${userEmail}'` : '';
-    const byUserDateFilter = date ? `AND toDate(timestamp) = '${date}'` : '';
+    const hourlyDateFilter = date ? `AND toDate(data_hora) = '${date}'` : '';
+    const userFilter = userEmail ? `AND email_usuario = '${userEmail}'` : '';
+    const byUserDateFilter = date ? `AND toDate(data_hora) = '${date}'` : '';
     const hourNum = hour ? parseInt(hour.replace('h', ''), 10) : null;
-    const byUserHourFilter = hourNum !== null ? `AND toHour(timestamp) = ${hourNum}` : '';
+    const byUserHourFilter = hourNum !== null ? `AND toHour(data_hora) = ${hourNum}` : '';
 
     console.log('[CreditsManager] getCreditsDetail filters:', {
       tenantId, date, userEmail, hour,
@@ -278,26 +278,26 @@ export class CreditsManager {
     const [hourlyRows, byUserRows] = await Promise.all([
       this.clickhouse.rawQuery(`
         SELECT
-          toString(toHour(timestamp)) as hour,
-          sum(total_tokens) as totalTokens,
-          sum(cost_usd) * ${rate} * ${markup} as costBrl
-        FROM ia_usage_tokens
+          toString(toHour(data_hora)) as hora,
+          sum(tokens_total) as totalTokens,
+          sum(custo_usd) * ${rate} * ${markup} as costBrl
+        FROM ia_uso_tokens
         WHERE tenant_id = '${tenantId}'
           ${hourlyDateFilter}
           ${userFilter}
-        GROUP BY hour
-        ORDER BY hour ASC
+        GROUP BY hora
+        ORDER BY hora ASC
       `),
       this.clickhouse.rawQuery(`
         SELECT
-          user_email as userEmail,
-          sum(total_tokens) as totalTokens,
-          sum(cost_usd) * ${rate} * ${markup} as costBrl
-        FROM ia_usage_tokens
+          email_usuario as emailUsuario,
+          sum(tokens_total) as totalTokens,
+          sum(custo_usd) * ${rate} * ${markup} as costBrl
+        FROM ia_uso_tokens
         WHERE tenant_id = '${tenantId}'
           ${byUserDateFilter}
           ${byUserHourFilter}
-        GROUP BY user_email
+        GROUP BY email_usuario
         ORDER BY costBrl DESC
         LIMIT 20
       `),
@@ -311,12 +311,12 @@ export class CreditsManager {
 
     return {
       hourly: hourlyRows.map((r: any) => ({
-        hour: String(r.hour).padStart(2, '0') + 'h',
+        hour: String(r.hora).padStart(2, '0') + 'h',
         totalTokens: Number(r.totalTokens),
         costBrl: Number(r.costBrl),
       })),
       byUser: (byUserRows as any[]).map(r => ({
-        userEmail: String(r.userEmail),
+        userEmail: String(r.emailUsuario),
         totalTokens: Number(r.totalTokens),
         costBrl: Number(r.costBrl),
       })),
@@ -325,18 +325,18 @@ export class CreditsManager {
 
   /**
    * Add credits to a tenant. Reads current config and inserts new row
-   * with contracted_brl += amountBrl, preserving rate and markup.
+   * with contratado_brl += amountBrl, preserving rate and markup.
    */
   async addCredits(tenantId: string, amountBrl: number): Promise<void> {
     const { contractedBrl, rate, markup } = await this.getConfig(tenantId);
     const newTotal = contractedBrl + amountBrl;
     await Promise.all([
       this.clickhouse.execute(`
-        INSERT INTO ia_tenant_credits (tenant_id, contracted_brl, usd_to_brl_rate, markup_multiplier)
+        INSERT INTO ia_creditos_tenant (tenant_id, contratado_brl, taxa_usd_brl, multiplicador_markup)
         VALUES ('${tenantId}', ${newTotal}, ${rate}, ${markup})
       `),
       this.clickhouse.execute(`
-        INSERT INTO ia_tenant_credits_recharges (tenant_id, amount_brl)
+        INSERT INTO ia_recargas_creditos (tenant_id, valor_brl)
         VALUES ('${tenantId}', ${amountBrl})
       `),
     ]);

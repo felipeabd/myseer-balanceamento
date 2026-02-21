@@ -1,54 +1,54 @@
--- Table for tracking token usage and costs
-CREATE TABLE IF NOT EXISTS ia_usage_tokens (
-    timestamp DateTime DEFAULT now(),
+-- Tabela para rastreamento de uso de tokens e custos
+CREATE TABLE IF NOT EXISTS ia_uso_tokens (
+    data_hora DateTime DEFAULT now(),
     tenant_id String,
-    user_email String,
-    conversation_id String,
-    model String,
-    input_tokens UInt32,
-    output_tokens UInt32,
-    total_tokens UInt32,
-    cost_usd Float32,
+    email_usuario String,
+    conversa_id String,
+    modelo String,
+    tokens_entrada UInt32,
+    tokens_saida UInt32,
+    tokens_total UInt32,
+    custo_usd Float32,
     endpoint String,
-    date Date DEFAULT toDate(timestamp)
+    data Date DEFAULT toDate(data_hora)
 ) ENGINE = MergeTree()
-PARTITION BY toYYYYMM(date)
-ORDER BY (tenant_id, date, timestamp);
+PARTITION BY toYYYYMM(data)
+ORDER BY (tenant_id, data, data_hora);
 
--- Index for faster queries by conversation
-ALTER TABLE ia_usage_tokens ADD INDEX idx_conversation_id conversation_id TYPE bloom_filter(0.01) GRANULARITY 1;
+-- Índice para consultas por conversa mais rápidas
+ALTER TABLE ia_uso_tokens ADD INDEX idx_conversa_id conversa_id TYPE bloom_filter(0.01) GRANULARITY 1;
 
--- Example queries:
+-- Consultas de exemplo:
 
--- 1. Total usage by tenant (current month)
+-- 1. Uso total por tenant (mês atual)
 -- SELECT
 --     tenant_id,
---     sum(total_tokens) as total_tokens,
---     sum(cost_usd) as total_cost_usd
--- FROM ia_usage_tokens
--- WHERE toYYYYMM(date) = toYYYYMM(now())
+--     sum(tokens_total) as tokens_total,
+--     sum(custo_usd) as custo_total_usd
+-- FROM ia_uso_tokens
+-- WHERE toYYYYMM(data) = toYYYYMM(now())
 -- GROUP BY tenant_id
--- ORDER BY total_cost_usd DESC;
+-- ORDER BY custo_total_usd DESC;
 
--- 2. Daily usage
+-- 2. Uso diário
 -- SELECT
---     date,
---     sum(total_tokens) as total_tokens,
---     sum(cost_usd) as total_cost_usd
--- FROM ia_usage_tokens
--- WHERE date >= today() - INTERVAL 30 DAY
--- GROUP BY date
--- ORDER BY date;
+--     data,
+--     sum(tokens_total) as tokens_total,
+--     sum(custo_usd) as custo_total_usd
+-- FROM ia_uso_tokens
+-- WHERE data >= today() - INTERVAL 30 DAY
+-- GROUP BY data
+-- ORDER BY data;
 
--- 3. Top conversations by cost
+-- 3. Top conversas por custo
 -- SELECT
---     conversation_id,
+--     conversa_id,
 --     tenant_id,
---     user_email,
---     sum(total_tokens) as total_tokens,
---     sum(cost_usd) as total_cost_usd
--- FROM ia_usage_tokens
--- WHERE date >= today() - INTERVAL 7 DAY
--- GROUP BY conversation_id, tenant_id, user_email
--- ORDER BY total_cost_usd DESC
+--     email_usuario,
+--     sum(tokens_total) as tokens_total,
+--     sum(custo_usd) as custo_total_usd
+-- FROM ia_uso_tokens
+-- WHERE data >= today() - INTERVAL 7 DAY
+-- GROUP BY conversa_id, tenant_id, email_usuario
+-- ORDER BY custo_total_usd DESC
 -- LIMIT 10;

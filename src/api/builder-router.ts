@@ -141,6 +141,48 @@ export function createBuilderRouter(agent: IrisAgent): Router {
     }
   });
 
+  // ── Versioning ─────────────────────────────────────────
+
+  /**
+   * GET /agents/:id/versions
+   * List all versions of an agent.
+   */
+  router.get('/agents/:id/versions', async (req: Request, res: Response) => {
+    try {
+      const registry = agent.getAgentRegistry();
+      const versions = await registry.getAgentVersions(req.params.id as string);
+      res.json({ versions });
+    } catch (error) {
+      console.error('[Builder] Get versions error:', error);
+      res.status(500).json({ error: 'Failed to get agent versions' });
+    }
+  });
+
+  /**
+   * PUT /agents/:id/rollback
+   * Rollback an agent to a previous version.
+   * Body: { versao: number }
+   */
+  router.put('/agents/:id/rollback', async (req: Request, res: Response) => {
+    try {
+      const { versao } = req.body as { versao: number };
+      if (!versao || typeof versao !== 'number') {
+        res.status(400).json({ error: 'versao é obrigatório e deve ser um número' });
+        return;
+      }
+      const registry = agent.getAgentRegistry();
+      const restored = await registry.rollbackAgent(req.params.id as string, versao);
+      if (!restored) {
+        res.status(404).json({ error: 'Agente ou versão não encontrado' });
+        return;
+      }
+      res.json(restored);
+    } catch (error) {
+      console.error('[Builder] Rollback agent error:', error);
+      res.status(500).json({ error: 'Failed to rollback agent' });
+    }
+  });
+
   // ── Schema Introspection ────────────────────────────────
 
   /**

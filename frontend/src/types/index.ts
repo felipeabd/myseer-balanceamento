@@ -1,1 +1,1 @@
-export type { Message, Conversation, ChatContextType } from './chat';
+export type { Message, Conversation, ChatContextType, StarterPrompt, AgentConfig } from './chat';

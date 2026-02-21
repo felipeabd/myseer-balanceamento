@@ -1,4 +1,4 @@
-# 📚 Sistema de Regras - Iris Balanceamento
+# 📚 Sistema de Regras - Iris
 
 ## ✅ Implementação Concluída
 
@@ -259,7 +259,7 @@ npm run setup:rules
 -- Forçar encerramento no ClickHouse
 INSERT INTO ia_sessoes_regras
 (conversation_id, tenant_id, user_email, agent_mode, status, started_at, ended_at)
-VALUES ('conv-id', 'tenant-id', 'email', 'iris_balanceamento', 0, now(), now());
+VALUES ('conv-id', 'tenant-id', 'email', 'iris', 0, now(), now());
 ```
 
 ---

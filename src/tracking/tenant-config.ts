@@ -27,11 +27,11 @@ export class TenantConfigManager {
   async ensureTable(): Promise<void> {
     try {
       await this.clickhouse.execute(`
-        CREATE TABLE IF NOT EXISTS ia_tenant_config (
+        CREATE TABLE IF NOT EXISTS ia_config_tenant (
           tenant_id String,
-          model_id  String,
-          updated_at DateTime DEFAULT now()
-        ) ENGINE = ReplacingMergeTree(updated_at)
+          modelo_id String,
+          atualizado_em DateTime DEFAULT now()
+        ) ENGINE = ReplacingMergeTree(atualizado_em)
         ORDER BY tenant_id
       `);
     } catch (err) {
@@ -42,13 +42,13 @@ export class TenantConfigManager {
   async getModel(tenantId: string): Promise<string> {
     try {
       const rows = await this.clickhouse.rawQuery(`
-        SELECT model_id
-        FROM ia_tenant_config
+        SELECT modelo_id
+        FROM ia_config_tenant
         FINAL
         WHERE tenant_id = '${tenantId}'
         LIMIT 1
       `);
-      return (rows[0]?.model_id as string) ?? DEFAULT_MODEL;
+      return (rows[0]?.modelo_id as string) ?? DEFAULT_MODEL;
     } catch {
       return DEFAULT_MODEL;
     }
@@ -61,7 +61,7 @@ export class TenantConfigManager {
       throw new Error(`Modelo não permitido: ${modelId}`);
     }
     await this.clickhouse.execute(`
-      INSERT INTO ia_tenant_config (tenant_id, model_id, updated_at)
+      INSERT INTO ia_config_tenant (tenant_id, modelo_id, atualizado_em)
       VALUES ('${tenantId}', '${modelId}', now())
     `);
   }
