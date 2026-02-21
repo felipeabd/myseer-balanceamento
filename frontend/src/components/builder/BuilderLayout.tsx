@@ -165,6 +165,11 @@ export function BuilderLayout({ userEmail, onExit }: BuilderLayoutProps) {
                           {agent.status}
                         </span>
                         <span className="text-[10px] text-gray-400">v{agent.versao}</span>
+                        {agent.tenantId && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700 truncate max-w-[80px]" title={agent.tenantId}>
+                            {agent.tenantId}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

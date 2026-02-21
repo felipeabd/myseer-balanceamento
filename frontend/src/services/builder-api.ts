@@ -38,6 +38,7 @@ export interface AgentDefinitionFull {
   contextoConversas: boolean;
   numConversasAnteriores: number;
   perfilUsuario: boolean;
+  tenantId: string;
   status: 'rascunho' | 'testando' | 'publicado';
   custoMensalBrl: number;
   criadoPor: string;

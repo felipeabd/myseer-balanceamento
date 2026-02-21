@@ -66,6 +66,9 @@ export interface AgentDefinition {
   // Persistent user profile
   perfilUsuario: boolean;
 
+  // Tenant exclusivity (empty string = global, tenant ID = exclusive)
+  tenantId: string;
+
   status: 'rascunho' | 'testando' | 'publicado';
   custoMensalBrl: number;
   criadoPor: string;

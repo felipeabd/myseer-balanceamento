@@ -41,6 +41,7 @@ function rowToAgent(row: Record<string, unknown>): AgentDefinition {
     contextoConversas: Number(row.contexto_conversas) === 1,
     numConversasAnteriores: Number(row.num_conversas_anteriores) || 5,
     perfilUsuario: Number(row.perfil_usuario) === 1,
+    tenantId: (row.tenant_id as string) || '',
 
     status: (row.status as AgentDefinition['status']) || 'rascunho',
     custoMensalBrl: Number(row.custo_mensal_brl) || 0,
@@ -117,8 +118,12 @@ export class AgentRegistry {
 
   /** Get agents available for a tenant (published + testando for "Em breve") */
   async getTenantAgents(tenantId: string): Promise<AgentInfo[]> {
+    // Global agents (tenant_id = '') OR agents exclusive to this tenant
     const rows = await this.clickhouse.rawQuery(
-      `SELECT * FROM ia_agentes FINAL WHERE status IN ('publicado', 'testando') ORDER BY ordem ASC`
+      `SELECT * FROM ia_agentes FINAL
+       WHERE status IN ('publicado', 'testando')
+         AND (tenant_id = '' OR tenant_id = '${escapeStr(tenantId)}')
+       ORDER BY ordem ASC`
     );
     const agents = rows.map(rowToAgent);
 
@@ -161,7 +166,7 @@ export class AgentRegistry {
         prompt_personalidade, prompt_tom, prompt_restricoes, prompt_exemplos, prompt_fluxo,
         tabelas, habilidades, regras_analise, conhecimento, perguntas_rapidas,
         modelo_padrao, max_tokens, temperatura, max_chamadas_ferramentas,
-        contexto_conversas, num_conversas_anteriores, perfil_usuario,
+        contexto_conversas, num_conversas_anteriores, perfil_usuario, tenant_id,
         status, custo_mensal_brl, criado_por, versao, ordem
       ) VALUES (
         '${id}',
@@ -189,6 +194,7 @@ export class AgentRegistry {
         ${data.contextoConversas ? 1 : 0},
         ${data.numConversasAnteriores ?? 5},
         ${data.perfilUsuario ? 1 : 0},
+        '${escapeStr(data.tenantId ?? '')}',
         '${escapeStr(data.status ?? 'rascunho')}',
         ${data.custoMensalBrl ?? 0},
         '${escapeStr(data.criadoPor)}',
@@ -214,7 +220,7 @@ export class AgentRegistry {
         prompt_personalidade, prompt_tom, prompt_restricoes, prompt_exemplos, prompt_fluxo,
         tabelas, habilidades, regras_analise, conhecimento, perguntas_rapidas,
         modelo_padrao, max_tokens, temperatura, max_chamadas_ferramentas,
-        contexto_conversas, num_conversas_anteriores, perfil_usuario,
+        contexto_conversas, num_conversas_anteriores, perfil_usuario, tenant_id,
         status, custo_mensal_brl, criado_por, versao, ordem, atualizado_em
       ) VALUES (
         '${id}',
@@ -242,6 +248,7 @@ export class AgentRegistry {
         ${merged.contextoConversas ? 1 : 0},
         ${merged.numConversasAnteriores},
         ${merged.perfilUsuario ? 1 : 0},
+        '${escapeStr(merged.tenantId)}',
         '${escapeStr(merged.status)}',
         ${merged.custoMensalBrl},
         '${escapeStr(merged.criadoPor)}',
@@ -306,7 +313,7 @@ export class AgentRegistry {
         prompt_personalidade, prompt_tom, prompt_restricoes, prompt_exemplos, prompt_fluxo,
         tabelas, habilidades, regras_analise, conhecimento, perguntas_rapidas,
         modelo_padrao, max_tokens, temperatura, max_chamadas_ferramentas,
-        contexto_conversas, num_conversas_anteriores, perfil_usuario,
+        contexto_conversas, num_conversas_anteriores, perfil_usuario, tenant_id,
         status, custo_mensal_brl, criado_por, versao, ordem, atualizado_em
       ) VALUES (
         '${id}',
@@ -334,6 +341,7 @@ export class AgentRegistry {
         ${target.contextoConversas ? 1 : 0},
         ${target.numConversasAnteriores},
         ${target.perfilUsuario ? 1 : 0},
+        '${escapeStr(target.tenantId)}',
         '${escapeStr(target.status)}',
         ${target.custoMensalBrl},
         '${escapeStr(target.criadoPor)}',
@@ -438,6 +446,7 @@ export class AgentRegistry {
     await this.clickhouse.execute(`ALTER TABLE ia_agentes ADD COLUMN IF NOT EXISTS contexto_conversas UInt8 DEFAULT 0`);
     await this.clickhouse.execute(`ALTER TABLE ia_agentes ADD COLUMN IF NOT EXISTS num_conversas_anteriores UInt8 DEFAULT 5`);
     await this.clickhouse.execute(`ALTER TABLE ia_agentes ADD COLUMN IF NOT EXISTS perfil_usuario UInt8 DEFAULT 0`);
+    await this.clickhouse.execute(`ALTER TABLE ia_agentes ADD COLUMN IF NOT EXISTS tenant_id String DEFAULT ''`);
 
     await this.clickhouse.execute(`
       CREATE TABLE IF NOT EXISTS ia_tenant_agentes (

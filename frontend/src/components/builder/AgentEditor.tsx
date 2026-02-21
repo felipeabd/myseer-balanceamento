@@ -48,6 +48,7 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
   const [contextoConversas, setContextoConversas] = useState(agent.contextoConversas ?? false);
   const [numConversasAnteriores, setNumConversasAnteriores] = useState(agent.numConversasAnteriores ?? 5);
   const [perfilUsuario, setPerfilUsuario] = useState(agent.perfilUsuario ?? false);
+  const [tenantId, setTenantId] = useState(agent.tenantId ?? '');
 
   const handleSave = async () => {
     setSaving(true);
@@ -73,6 +74,7 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
         contextoConversas,
         numConversasAnteriores,
         perfilUsuario,
+        tenantId,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -337,6 +339,29 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
                     O perfil e atualizado automaticamente apos cada conversa. Adiciona ~100-200 tokens ao prompt.
                   </p>
                 )}
+              </div>
+
+              {/* Tenant exclusivity */}
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-1">Exclusividade por Tenant</h3>
+                <p className="text-xs text-gray-500 mb-3">
+                  Deixe em branco para que o agente seja global (visivel para todos os tenants). Preencha com um Tenant ID para que o agente seja exclusivo daquele cliente.
+                </p>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Tenant ID (vazio = global)</label>
+                  <input
+                    type="text"
+                    value={tenantId}
+                    onChange={(e) => setTenantId(e.target.value.trim())}
+                    placeholder="Ex: cliente-abc (vazio = todos os tenants)"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  {tenantId && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Este agente so aparecera para o tenant <strong>{tenantId}</strong>.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
