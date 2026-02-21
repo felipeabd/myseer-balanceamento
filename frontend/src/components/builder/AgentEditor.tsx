@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { BuilderApiService, type AgentDefinitionFull } from '../../services/builder-api';
 import { TestChat } from './TestChat';
+import { TableSelector } from './TableSelector';
+import { StarterPromptsEditor } from './StarterPromptsEditor';
 
 interface AgentEditorProps {
   agent: AgentDefinitionFull;
@@ -34,8 +36,8 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish }: Agen
   const [skills, setSkills] = useState(agent.skills);
   const [regraAnalise, setRegraAnalise] = useState(agent.regraAnalise);
   const [conhecimento, setConhecimento] = useState(agent.conhecimento);
-  const [tabelasJson, setTabelasJson] = useState(JSON.stringify(agent.tabelas, null, 2));
-  const [perguntasJson, setPerguntasJson] = useState(JSON.stringify(agent.perguntasRapidas, null, 2));
+  const [tabelas, setTabelas] = useState(agent.tabelas);
+  const [perguntasRapidas, setPerguntasRapidas] = useState(agent.perguntasRapidas);
 
   const [modeloPadrao, setModeloPadrao] = useState(agent.modeloPadrao);
   const [maxTokens, setMaxTokens] = useState(agent.maxTokens);
@@ -46,12 +48,6 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish }: Agen
     setSaving(true);
     setSaved(false);
     try {
-      let tabelas = agent.tabelas;
-      try { tabelas = JSON.parse(tabelasJson); } catch { /* keep current */ }
-
-      let perguntasRapidas = agent.perguntasRapidas;
-      try { perguntasRapidas = JSON.parse(perguntasJson); } catch { /* keep current */ }
-
       await onSave(agent.id, {
         nome,
         descricao,
@@ -185,18 +181,7 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish }: Agen
           )}
 
           {tab === 'tabelas' && (
-            <>
-              <p className="text-sm text-gray-500 mb-2">
-                JSON com as tabelas e colunas que o agente pode acessar.
-                Cada entrada: tabela, alias, colunas[], filtroObrigatorio.
-              </p>
-              <textarea
-                value={tabelasJson}
-                onChange={(e) => setTabelasJson(e.target.value)}
-                rows={20}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
-            </>
+            <TableSelector tabelas={tabelas} onChange={setTabelas} api={api} />
           )}
 
           {tab === 'skills' && (
@@ -244,17 +229,7 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish }: Agen
           )}
 
           {tab === 'perguntas' && (
-            <>
-              <p className="text-sm text-gray-500 mb-2">
-                JSON com as perguntas rapidas exibidas ao usuario. Cada entrada: icon, title, prompt.
-              </p>
-              <textarea
-                value={perguntasJson}
-                onChange={(e) => setPerguntasJson(e.target.value)}
-                rows={16}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
-            </>
+            <StarterPromptsEditor prompts={perguntasRapidas} onChange={setPerguntasRapidas} />
           )}
 
           {tab === 'config' && (
