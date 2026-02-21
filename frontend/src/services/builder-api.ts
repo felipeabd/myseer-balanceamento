@@ -120,6 +120,7 @@ export interface TraceRecord {
   hasError: boolean;
   responseTimeMs: number;
   tenantId: string;
+  clientName: string;
   userEmail: string;
   rating: 1 | -1 | 0;
   feedbackText: string;

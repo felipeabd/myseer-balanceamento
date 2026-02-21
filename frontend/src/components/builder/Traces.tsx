@@ -133,7 +133,11 @@ export function Traces({ agentId, api }: TracesProps) {
               </p>
               <div className="flex items-center gap-2 text-[10px] text-gray-400">
                 <span>{formatDate(trace.timestamp)}</span>
-                {trace.tenantId && <span className="truncate max-w-[80px]">{trace.tenantId}</span>}
+                {(trace.clientName || trace.tenantId) && (
+                  <span className="truncate max-w-[100px]" title={trace.tenantId}>
+                    {trace.clientName || trace.tenantId}
+                  </span>
+                )}
                 {trace.toolsUsed.length > 0 && (
                   <span className="text-blue-400">{trace.toolsUsed.length} tools</span>
                 )}
@@ -179,7 +183,7 @@ export function Traces({ agentId, api }: TracesProps) {
                   )}
                 </div>
                 <p className="text-[11px] text-gray-400">
-                  {formatDate(selected.timestamp)} · {selected.userEmail} · {selected.tenantId || 'sem tenant'}
+                  {formatDate(selected.timestamp)} · {selected.userEmail} · {selected.clientName || selected.tenantId || 'sem tenant'}
                 </p>
               </div>
               <div className="text-right shrink-0">

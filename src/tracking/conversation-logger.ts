@@ -13,6 +13,7 @@ export interface TraceRow {
   hasError: boolean;
   responseTimeMs: number;
   tenantId: string;
+  clientName: string;
   userEmail: string;
   rating: 1 | -1 | 0;
   feedbackText: string;
@@ -329,19 +330,36 @@ export class ConversationLogger {
 
     if (logs.length === 0) return [];
 
-    // Fetch feedback for these message ids
+    // Collect unique IDs for batch lookups
     const msgIds = logs.map((r: Record<string, unknown>) => `'${r.message_id}'`).join(',');
-    const feedbacks = await this.clickhouse.query(`
-      SELECT message_id, rating, feedback_text
-      FROM ia_feedback FINAL
-      WHERE message_id IN (${msgIds})
-    `, { tenantId: '', userEmail: '' });
+    const uniqueTenants = [...new Set(logs.map((r: Record<string, unknown>) => r.tenant_id as string).filter(Boolean))];
+    const tenantIds = uniqueTenants.map(t => `'${escape(t)}'`).join(',');
+
+    // Fetch feedback + client names in parallel
+    const [feedbacks, clientRows] = await Promise.all([
+      this.clickhouse.query(`
+        SELECT message_id, rating, feedback_text
+        FROM ia_feedback FINAL
+        WHERE message_id IN (${msgIds})
+      `, { tenantId: '', userEmail: '' }),
+      tenantIds
+        ? this.clickhouse.query(`
+            SELECT DISTINCT tenant, cliente
+            FROM dimensao_parametros_dw07
+            WHERE tenant IN (${tenantIds})
+          `, { tenantId: '', userEmail: '' })
+        : Promise.resolve([]),
+    ]);
 
     const feedbackMap = new Map<string, { rating: number; feedback_text: string }>(
       feedbacks.map((f: Record<string, unknown>) => [
         f.message_id as string,
         { rating: Number(f.rating), feedback_text: (f.feedback_text as string) || '' },
       ])
+    );
+
+    const clientMap = new Map<string, string>(
+      clientRows.map((r: Record<string, unknown>) => [r.tenant as string, (r.cliente as string) || ''])
     );
 
     return logs.map((r: Record<string, unknown>) => {
@@ -365,6 +383,7 @@ export class ConversationLogger {
         hasError: Number(r.has_error) === 1,
         responseTimeMs: Number(r.response_time_ms) || 0,
         tenantId: (r.tenant_id as string) || '',
+        clientName: clientMap.get((r.tenant_id as string) || '') || '',
         userEmail: (r.user_email as string) || '',
         rating: fb ? (fb.rating as 1 | -1 | 0) : 0,
         feedbackText: fb ? fb.feedback_text : '',
