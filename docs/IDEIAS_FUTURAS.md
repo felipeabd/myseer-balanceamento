@@ -29,37 +29,56 @@ Ideias discutidas mas adiadas para versões futuras.
 
 ---
 
-## 3. Builder com UX para não-técnicos
+## 3. ~~Builder com UX para não-técnicos~~ (IMPLEMENTADO)
 
-**Contexto:** Hoje os campos de Tabelas e Perguntas Rápidas no Builder são JSONs em textarea. Funciona para o time técnico mas não é acessível para um especialista de negócio.
-
-**Ideia futura:** Substituir os textareas JSON por componentes visuais:
-- **Tabelas:** Dropdown para selecionar tabela, checkboxes para colunas, input para filtro obrigatório. Botão "+ Adicionar tabela".
-- **Perguntas Rápidas:** Lista editável com inputs separados para emoji, título e prompt. Drag-and-drop para reordenar.
-
-**Complexidade:** Média. Os endpoints de introspection (`GET /tables`, `GET /tables/:name/columns`) já existem no builder-router.
+Implementado com TableSelector (dropdown + checkboxes de colunas) e StarterPromptsEditor (cards visuais com move up/down).
 
 ---
 
-## 4. Persistência de Conversas
+## 4. ~~Persistência de Conversas~~ (IMPLEMENTADO)
 
-**Contexto:** O ConversationManager é in-memory. Se o servidor reiniciar, todas as conversas são perdidas. Em produção com múltiplas instâncias, cada instância teria conversas isoladas.
-
-**Ideia futura:** Persistir conversas no ClickHouse (ou outro banco). Permitiria:
-- Sobreviver a restarts
-- Múltiplas instâncias compartilhando estado
-- Histórico de conversas para analytics
-
-**Implementação:** Criar tabela `ia_conversas` com messages serializadas em JSON.
+Implementado com tabelas `ia_conversas` (ReplacingMergeTree) e `ia_mensagens` (MergeTree). Cache in-memory + ClickHouse persistence. Conversas sobrevivem restart do servidor.
 
 ---
 
-## 5. Versionamento e Rollback de Agentes
+## 5. ~~Versionamento e Rollback de Agentes~~ (IMPLEMENTADO)
 
-**Contexto:** O campo `versao` existe na tabela `ia_agentes` mas não há mecanismo de rollback. Se alguém publicar uma config ruim, não tem como reverter facilmente.
+Implementado usando o histórico natural do ReplacingMergeTree (sem tabela extra). Tab "Historico" no Builder com lista de versões e botão "Restaurar".
 
-**Ideia futura:** Manter histórico de versões do agente. Cada save cria uma nova versão. O Builder mostraria timeline de versões com diff e botão "Restaurar versão X".
+---
 
-**Implementação:** Tabela `ia_agentes_versoes` que armazena snapshots completos da config. O ReplacingMergeTree já versiona naturalmente, mas um histórico explícito daria controle ao usuário.
+## 6. Contexto Cross-Conversa (Resumo no System Prompt)
+
+**Contexto:** Hoje cada conversa nova começa do zero. O agente não lembra do que foi discutido em conversas anteriores do mesmo usuário.
+
+**Ideia:** Ao iniciar uma conversa nova, carregar resumos das últimas N conversas do usuário e injetar no system prompt. Exemplo: "O usuário já conversou sobre ruptura na linha X, excesso na filial Y, etc."
+
+**Complexidade:** Baixa. Já temos as mensagens persistidas em `ia_mensagens`. Basta buscar as últimas conversas, gerar resumo (pode ser via LLM ou simples truncamento) e incluir no prompt.
+
+---
+
+## 7. Contexto Cross-Conversa (Busca Semântica / RAG)
+
+**Contexto:** O resumo simples funciona bem para conversas recentes, mas não escala para meses de histórico.
+
+**Ideia:** Quando o usuário faz uma pergunta, buscar nas conversas anteriores trechos semanticamente relevantes e incluir como contexto. Permite que o agente "lembre" de discussões passadas mesmo sem ter visto o resumo.
+
+**Complexidade:** Alta. Requer embeddings das mensagens, armazenamento vetorial (pode usar ClickHouse com `cosineDistance` ou banco vetorial dedicado), e pipeline de indexação.
+
+---
+
+## 8. Contexto Cross-Conversa (Perfil Persistente do Usuário)
+
+**Contexto:** Resumos e RAG são reativos — buscam quando perguntado. Um perfil persistente seria proativo.
+
+**Ideia:** Manter um "perfil" por usuário que acumula preferências e contexto ao longo do tempo. Exemplos:
+- "Esse usuário acompanha a linha Medicamentos Genéricos"
+- "Geralmente filtra por curva A e B"
+- "Costuma pedir exportação CSV"
+- "Prefere análises por filial"
+
+O perfil seria atualizado automaticamente após cada conversa (via LLM) e injetado no system prompt de toda conversa nova.
+
+**Complexidade:** Média. Tabela `ia_perfil_usuario` com campo JSON. Após cada conversa, chamar LLM para atualizar o perfil com novos insights.
 
 ---
