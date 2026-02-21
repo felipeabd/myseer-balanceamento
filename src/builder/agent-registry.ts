@@ -118,11 +118,11 @@ export class AgentRegistry {
 
   /** Get agents available for a tenant (published + testando for "Em breve") */
   async getTenantAgents(tenantId: string): Promise<AgentInfo[]> {
-    // Global agents (tenant_id = '') OR agents exclusive to this tenant
+    // Global agents (tenant_id = '') OR agents exclusive to this tenant (supports comma-separated list)
     const rows = await this.clickhouse.rawQuery(
       `SELECT * FROM ia_agentes FINAL
        WHERE status IN ('publicado', 'testando')
-         AND (tenant_id = '' OR tenant_id = '${escapeStr(tenantId)}')
+         AND (tenant_id = '' OR has(splitByChar(',', tenant_id), '${escapeStr(tenantId)}'))
        ORDER BY ordem ASC`
     );
     const agents = rows.map(rowToAgent);

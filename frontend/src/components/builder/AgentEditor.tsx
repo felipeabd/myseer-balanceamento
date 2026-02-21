@@ -353,12 +353,12 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
                     type="text"
                     value={tenantId}
                     onChange={(e) => setTenantId(e.target.value.trim())}
-                    placeholder="Ex: cliente-abc (vazio = todos os tenants)"
+                    placeholder="Ex: cliente-abc ou cliente-a,cliente-b (vazio = todos)"
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                   />
                   {tenantId && (
                     <p className="text-xs text-amber-600 mt-1">
-                      Este agente so aparecera para o tenant <strong>{tenantId}</strong>.
+                      Este agente so aparecera para: <strong>{tenantId.split(',').map(t => t.trim()).filter(Boolean).join(', ')}</strong>.
                     </p>
                   )}
                 </div>
