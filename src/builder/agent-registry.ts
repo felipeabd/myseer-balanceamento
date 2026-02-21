@@ -40,6 +40,7 @@ function rowToAgent(row: Record<string, unknown>): AgentDefinition {
 
     contextoConversas: Number(row.contexto_conversas) === 1,
     numConversasAnteriores: Number(row.num_conversas_anteriores) || 5,
+    perfilUsuario: Number(row.perfil_usuario) === 1,
 
     status: (row.status as AgentDefinition['status']) || 'rascunho',
     custoMensalBrl: Number(row.custo_mensal_brl) || 0,
@@ -160,7 +161,7 @@ export class AgentRegistry {
         prompt_personalidade, prompt_tom, prompt_restricoes, prompt_exemplos, prompt_fluxo,
         tabelas, habilidades, regras_analise, conhecimento, perguntas_rapidas,
         modelo_padrao, max_tokens, temperatura, max_chamadas_ferramentas,
-        contexto_conversas, num_conversas_anteriores,
+        contexto_conversas, num_conversas_anteriores, perfil_usuario,
         status, custo_mensal_brl, criado_por, versao, ordem
       ) VALUES (
         '${id}',
@@ -187,6 +188,7 @@ export class AgentRegistry {
         ${data.maxToolCalls ?? 3},
         ${data.contextoConversas ? 1 : 0},
         ${data.numConversasAnteriores ?? 5},
+        ${data.perfilUsuario ? 1 : 0},
         '${escapeStr(data.status ?? 'rascunho')}',
         ${data.custoMensalBrl ?? 0},
         '${escapeStr(data.criadoPor)}',
@@ -212,7 +214,7 @@ export class AgentRegistry {
         prompt_personalidade, prompt_tom, prompt_restricoes, prompt_exemplos, prompt_fluxo,
         tabelas, habilidades, regras_analise, conhecimento, perguntas_rapidas,
         modelo_padrao, max_tokens, temperatura, max_chamadas_ferramentas,
-        contexto_conversas, num_conversas_anteriores,
+        contexto_conversas, num_conversas_anteriores, perfil_usuario,
         status, custo_mensal_brl, criado_por, versao, ordem, atualizado_em
       ) VALUES (
         '${id}',
@@ -239,6 +241,7 @@ export class AgentRegistry {
         ${merged.maxToolCalls},
         ${merged.contextoConversas ? 1 : 0},
         ${merged.numConversasAnteriores},
+        ${merged.perfilUsuario ? 1 : 0},
         '${escapeStr(merged.status)}',
         ${merged.custoMensalBrl},
         '${escapeStr(merged.criadoPor)}',
@@ -303,7 +306,7 @@ export class AgentRegistry {
         prompt_personalidade, prompt_tom, prompt_restricoes, prompt_exemplos, prompt_fluxo,
         tabelas, habilidades, regras_analise, conhecimento, perguntas_rapidas,
         modelo_padrao, max_tokens, temperatura, max_chamadas_ferramentas,
-        contexto_conversas, num_conversas_anteriores,
+        contexto_conversas, num_conversas_anteriores, perfil_usuario,
         status, custo_mensal_brl, criado_por, versao, ordem, atualizado_em
       ) VALUES (
         '${id}',
@@ -330,6 +333,7 @@ export class AgentRegistry {
         ${target.maxToolCalls},
         ${target.contextoConversas ? 1 : 0},
         ${target.numConversasAnteriores},
+        ${target.perfilUsuario ? 1 : 0},
         '${escapeStr(target.status)}',
         ${target.custoMensalBrl},
         '${escapeStr(target.criadoPor)}',
@@ -433,6 +437,7 @@ export class AgentRegistry {
     await this.clickhouse.execute(`ALTER TABLE ia_agentes ADD COLUMN IF NOT EXISTS conhecimento String DEFAULT ''`);
     await this.clickhouse.execute(`ALTER TABLE ia_agentes ADD COLUMN IF NOT EXISTS contexto_conversas UInt8 DEFAULT 0`);
     await this.clickhouse.execute(`ALTER TABLE ia_agentes ADD COLUMN IF NOT EXISTS num_conversas_anteriores UInt8 DEFAULT 5`);
+    await this.clickhouse.execute(`ALTER TABLE ia_agentes ADD COLUMN IF NOT EXISTS perfil_usuario UInt8 DEFAULT 0`);
 
     await this.clickhouse.execute(`
       CREATE TABLE IF NOT EXISTS ia_tenant_agentes (

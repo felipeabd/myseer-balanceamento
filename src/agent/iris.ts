@@ -14,6 +14,7 @@ import { CsvStore } from '../csv/csv-store';
 import { generateCsv } from '../csv/csv-generator';
 import { AgentRegistry } from '../builder/agent-registry';
 import { SummaryGenerator, formatSummariesForPrompt } from '../conversation/summary-generator';
+import { ProfileManager, formatProfileForPrompt } from '../conversation/profile-manager';
 import {
   IrisConfig,
   TenantContext,
@@ -44,6 +45,7 @@ export class IrisAgent {
   private baseUrl: string;
   private agentRegistry: AgentRegistry;
   private summaryGenerator: SummaryGenerator;
+  private profileManager: ProfileManager;
 
   private readonly LEGACY_AGENT_NAME = 'iris';
 
@@ -78,6 +80,7 @@ export class IrisAgent {
     this.baseUrl = config.baseUrl ?? `http://localhost:${process.env.PORT ?? 3030}`;
     this.agentRegistry = new AgentRegistry(this.clickhouse);
     this.summaryGenerator = new SummaryGenerator(this.clickhouse, this.anthropic);
+    this.profileManager = new ProfileManager(this.clickhouse, this.anthropic);
   }
 
   /** Get usage tracker instance */
@@ -142,8 +145,8 @@ export class IrisAgent {
     currentConversationId?: string
   ): Promise<{ systemPrompt: string; tools: Anthropic.Tool[]; agentName: string; maxTokens: number; temperature: number; maxCalls: number }> {
     if (agent) {
-      // Fetch rules and summaries in parallel
-      const [rulesPrompt, summaries] = await Promise.all([
+      // Fetch rules, summaries, and user profile in parallel
+      const [rulesPrompt, summaries, profile] = await Promise.all([
         this.loadRulesSkill.execute(tenant.tenantId),
         agent.contextoConversas && currentConversationId
           ? this.summaryGenerator.getRecentSummaries(
@@ -154,14 +157,21 @@ export class IrisAgent {
               agent.numConversasAnteriores
             )
           : Promise.resolve([]),
+        agent.perfilUsuario
+          ? this.profileManager.getProfile(tenant.tenantId, tenant.userEmail, agent.slug)
+          : Promise.resolve(''),
       ]);
 
       const summariesPrompt = summaries.length > 0
         ? formatSummariesForPrompt(summaries)
         : '';
 
+      const perfilPrompt = profile
+        ? formatProfileForPrompt(profile)
+        : '';
+
       return {
-        systemPrompt: buildDynamicSystemPrompt(agent, tenant, rulesPrompt, summariesPrompt),
+        systemPrompt: buildDynamicSystemPrompt(agent, tenant, rulesPrompt, summariesPrompt, perfilPrompt),
         tools: getToolsForAgent(agent),
         agentName: agent.slug,
         maxTokens: agent.maxTokens,
@@ -395,6 +405,13 @@ export class IrisAgent {
       this.summaryGenerator.generateSummary(
         conv.id, tenant.tenantId, tenant.userEmail, agent.slug, conv.messages
       ).catch(err => console.error('[Iris] Summary generation failed:', err));
+    }
+
+    // Update user profile (fire-and-forget)
+    if (agent?.perfilUsuario) {
+      this.profileManager.updateProfile(
+        tenant.tenantId, tenant.userEmail, agent.slug, conv.messages
+      ).catch(err => console.error('[Iris] Profile update failed:', err));
     }
 
     // Track token usage
@@ -657,6 +674,13 @@ export class IrisAgent {
       this.summaryGenerator.generateSummary(
         conv.id, tenant.tenantId, tenant.userEmail, agent.slug, conv.messages
       ).catch(err => console.error('[Iris] Summary generation failed:', err));
+    }
+
+    // Update user profile (fire-and-forget)
+    if (agent?.perfilUsuario) {
+      this.profileManager.updateProfile(
+        tenant.tenantId, tenant.userEmail, agent.slug, conv.messages
+      ).catch(err => console.error('[Iris] Profile update failed:', err));
     }
 
     // Track token usage

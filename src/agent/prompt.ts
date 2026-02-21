@@ -10,7 +10,8 @@ export function buildDynamicSystemPrompt(
   agent: AgentDefinition,
   tenant: TenantContext,
   rulesPrompt: string = '',
-  summariesPrompt: string = ''
+  summariesPrompt: string = '',
+  perfilPrompt: string = ''
 ): string {
   const sections: string[] = [];
 
@@ -48,6 +49,11 @@ export function buildDynamicSystemPrompt(
   // Conhecimento base do agente (definido pelo especialista)
   if (agent.conhecimento) {
     sections.push(`## CONHECIMENTO\n${agent.conhecimento}`);
+  }
+
+  // Persistent user profile
+  if (perfilPrompt) {
+    sections.push(perfilPrompt);
   }
 
   // Cross-conversation context (summaries from previous conversations)

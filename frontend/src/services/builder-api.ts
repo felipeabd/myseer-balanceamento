@@ -37,6 +37,7 @@ export interface AgentDefinitionFull {
   maxToolCalls: number;
   contextoConversas: boolean;
   numConversasAnteriores: number;
+  perfilUsuario: boolean;
   status: 'rascunho' | 'testando' | 'publicado';
   custoMensalBrl: number;
   criadoPor: string;

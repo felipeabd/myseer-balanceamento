@@ -63,6 +63,9 @@ export interface AgentDefinition {
   contextoConversas: boolean;
   numConversasAnteriores: number;
 
+  // Persistent user profile
+  perfilUsuario: boolean;
+
   status: 'rascunho' | 'testando' | 'publicado';
   custoMensalBrl: number;
   criadoPor: string;

@@ -47,6 +47,7 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
   const [maxToolCalls, setMaxToolCalls] = useState(agent.maxToolCalls);
   const [contextoConversas, setContextoConversas] = useState(agent.contextoConversas ?? false);
   const [numConversasAnteriores, setNumConversasAnteriores] = useState(agent.numConversasAnteriores ?? 5);
+  const [perfilUsuario, setPerfilUsuario] = useState(agent.perfilUsuario ?? false);
 
   const handleSave = async () => {
     setSaving(true);
@@ -71,6 +72,7 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
         maxToolCalls,
         contextoConversas,
         numConversasAnteriores,
+        perfilUsuario,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -316,6 +318,24 @@ export function AgentEditor({ agent, api, onSave, onPublish, onUnpublish, onRoll
                       Cada resumo adiciona ~100-150 tokens ao prompt. Recomendado: 3-10.
                     </p>
                   </div>
+                )}
+              </div>
+
+              {/* Persistent user profile */}
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-1">Perfil persistente do usuario</h3>
+                <p className="text-xs text-gray-500 mb-3">
+                  Quando habilitado, o agente aprende o perfil do usuario ao longo das conversas e personaliza as respostas de acordo com seu cargo, preferencias e areas de interesse.
+                </p>
+                <Toggle
+                  label="Habilitar perfil persistente do usuario"
+                  checked={perfilUsuario}
+                  onChange={setPerfilUsuario}
+                />
+                {perfilUsuario && (
+                  <p className="text-xs text-gray-400 mt-2 ml-13">
+                    O perfil e atualizado automaticamente apos cada conversa. Adiciona ~100-200 tokens ao prompt.
+                  </p>
                 )}
               </div>
             </div>
