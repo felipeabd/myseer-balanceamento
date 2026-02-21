@@ -82,3 +82,45 @@ O perfil seria atualizado automaticamente após cada conversa (via LLM) e injeta
 **Complexidade:** Média. Tabela `ia_perfil_usuario` com campo JSON. Após cada conversa, chamar LLM para atualizar o perfil com novos insights.
 
 ---
+
+## 9. Suporte Multi-Provider (OpenAI, Gemini, DeepSeek)
+
+**Contexto:** Hoje o sistema usa exclusivamente a API da Anthropic (Claude). Todos os agentes rodam no mesmo provider, variando apenas o modelo (Haiku, Sonnet, Opus).
+
+**Ideia:** Permitir que cada agente use um provider diferente (Anthropic, OpenAI, Google Gemini, DeepSeek). O especialista escolheria no Builder qual provider/modelo usar para cada agente.
+
+**Benefícios:**
+- **Custo:** DeepSeek (gratuito) ou modelos baratos para agentes simples (saudação, FAQ)
+- **Flexibilidade:** Modelo certo para cada caso de uso
+- **Resiliência:** Se um provider cair, agentes em outros providers continuam funcionando
+
+**Desafios:**
+- Cada provider tem formato diferente de tool calling (Anthropic `tool_use`, OpenAI `function_calling`, Gemini `functionDeclarations`)
+- Streaming SSE tem formatos diferentes por provider
+- Gerenciamento de múltiplas API keys por tenant/global
+- Contagem de tokens e pricing diferente por provider
+
+**UX para o usuário final:** O usuário não precisa saber qual provider está por trás. Ele continua vendo apenas "Básico" e "Avançado" no toggle do chat. Quem define o que cada nível significa é o **desenvolvedor no Builder**. Exemplo:
+
+```
+Agente Balanceamento:
+  Modelo Básico:     DeepSeek V3        (gratuito)
+  Modelo Avançado:   Claude Opus        (premium)
+
+Agente Compras:
+  Modelo Básico:     Gemini Flash       (barato)
+  Modelo Avançado:   GPT-4o             (caro)
+```
+
+O usuário final só vê o toggle — a complexidade de providers fica invisível pra ele.
+
+**Implementação:**
+1. Criar interface `LLMProvider` com métodos: `chat()`, `chatStream()`, `formatTools()`
+2. Implementar adapters: `AnthropicProvider`, `OpenAIProvider`, `GeminiProvider`, `DeepSeekProvider` (compatível com SDK OpenAI)
+3. No Builder, trocar campo `modeloPadrao` por dois campos: `modeloBasico` e `modeloAvancado`, cada um com select de provider + modelo
+4. Na `iris.ts`, resolver o provider correto baseado na escolha do usuário (básico/avançado) + config do agente
+5. API keys configuradas via env vars (`OPENAI_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`)
+
+**Complexidade:** Alta. A camada de abstração de tools é o maior desafio, pois cada provider interpreta tool results de forma diferente.
+
+---
