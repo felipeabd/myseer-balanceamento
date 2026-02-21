@@ -20,17 +20,17 @@ export class SessionManager {
   async getActiveSession(conversationId: string): Promise<TrainingSession | null> {
     const query = `
       SELECT
-        conversa_id as conversationId,
+        conversation_id as conversationId,
         tenant_id as tenantId,
-        email_usuario as userEmail,
-        modo_agente as agentMode,
+        user_email as userEmail,
+        agent_mode as agentMode,
         status,
-        iniciado_em as startedAt,
-        encerrado_em as endedAt,
-        ultima_atividade as lastActivity
+        started_at as startedAt,
+        ended_at as endedAt,
+        last_activity as lastActivity
       FROM ia_sessoes_regras
-      WHERE conversa_id = '${conversationId}'
-      ORDER BY ultima_atividade DESC
+      WHERE conversation_id = '${conversationId}'
+      ORDER BY last_activity DESC
       LIMIT 1
     `;
 
@@ -53,12 +53,12 @@ export class SessionManager {
   ): Promise<void> {
     const query = `
       INSERT INTO ia_sessoes_regras (
-        conversa_id,
+        conversation_id,
         tenant_id,
-        email_usuario,
-        modo_agente,
+        user_email,
+        agent_mode,
         status,
-        iniciado_em
+        started_at
       ) VALUES (
         '${conversationId}',
         '${tenantId}',
@@ -80,18 +80,18 @@ export class SessionManager {
     const session = await this.getActiveSession(conversationId);
 
     if (!session) {
-      throw new Error(`Sessão não encontrada para conversa_id: ${conversationId}`);
+      throw new Error(`Session not found for conversation_id: ${conversationId}`);
     }
 
     const query = `
       INSERT INTO ia_sessoes_regras (
-        conversa_id,
+        conversation_id,
         tenant_id,
-        email_usuario,
-        modo_agente,
+        user_email,
+        agent_mode,
         status,
-        iniciado_em,
-        encerrado_em
+        started_at,
+        ended_at
       ) VALUES (
         '${conversationId}',
         '${session.tenantId}',

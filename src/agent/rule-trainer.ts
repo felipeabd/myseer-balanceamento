@@ -329,7 +329,7 @@ Quando o usuário pedir para CORRIGIR, REFAZER ou ALTERAR uma regra:
     ];
 
     // Get or create conversation and add user message
-    const conv = this.conversations.getOrCreate(conversationId, tenant);
+    const conv = await this.conversations.getOrCreate(conversationId, tenant);
     this.conversations.addMessage(conv.id, {
       role: 'user',
       content: userMessage,

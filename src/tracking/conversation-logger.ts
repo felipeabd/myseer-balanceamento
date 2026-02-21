@@ -72,22 +72,22 @@ export class ConversationLogger {
       : '[]';
 
     const query = `
-      INSERT INTO ia_log_agentes (
-        agente,
+      INSERT INTO ia_agents_log (
+        agent,
         tenant_id,
-        email_usuario,
-        conversa_id,
-        mensagem_id,
-        pergunta_usuario,
-        resumo_resposta,
-        tipo_resposta,
-        ferramentas_usadas,
-        consultas_sql,
-        entidades_negocio,
-        palavras_chave,
-        tem_erro,
-        tempo_resposta_ms,
-        metadados_agente
+        user_email,
+        conversation_id,
+        message_id,
+        user_question,
+        response_summary,
+        response_type,
+        tools_used,
+        sql_queries,
+        business_entities,
+        keywords,
+        has_error,
+        response_time_ms,
+        agent_metadata
       ) VALUES (
         '${data.agent}',
         '${data.tenantId}',
@@ -123,7 +123,7 @@ export class ConversationLogger {
     const conditions: string[] = ['1=1'];
 
     if (params.agent) {
-      conditions.push(`agente = '${params.agent}'`);
+      conditions.push(`agent = '${params.agent}'`);
     }
 
     if (params.tenantId) {
@@ -131,45 +131,45 @@ export class ConversationLogger {
     }
 
     if (params.conversationId) {
-      conditions.push(`conversa_id = '${params.conversationId}'`);
+      conditions.push(`conversation_id = '${params.conversationId}'`);
     }
 
     if (params.hasError !== undefined) {
-      conditions.push(`tem_erro = ${params.hasError ? 1 : 0}`);
+      conditions.push(`has_error = ${params.hasError ? 1 : 0}`);
     }
 
     if (params.startDate) {
-      conditions.push(`data_hora >= '${params.startDate.toISOString().slice(0, 19).replace('T', ' ')}'`);
+      conditions.push(`timestamp >= '${params.startDate.toISOString().slice(0, 19).replace('T', ' ')}'`);
     }
 
     if (params.endDate) {
-      conditions.push(`data_hora <= '${params.endDate.toISOString().slice(0, 19).replace('T', ' ')}'`);
+      conditions.push(`timestamp <= '${params.endDate.toISOString().slice(0, 19).replace('T', ' ')}'`);
     }
 
     const limit = params.limit ?? 100;
 
     const sql = `
       SELECT
-        data_hora,
-        agente,
+        timestamp,
+        agent,
         tenant_id,
-        email_usuario,
-        conversa_id,
-        mensagem_id,
-        pergunta_usuario,
-        resumo_resposta,
-        tipo_resposta,
-        ferramentas_usadas,
-        consultas_sql,
-        entidades_negocio,
-        palavras_chave,
-        tem_erro,
-        tempo_resposta_ms,
-        avaliacao_usuario,
-        feedback_usuario
-      FROM ia_log_agentes
+        user_email,
+        conversation_id,
+        message_id,
+        user_question,
+        response_summary,
+        response_type,
+        tools_used,
+        sql_queries,
+        business_entities,
+        keywords,
+        has_error,
+        response_time_ms,
+        user_rating,
+        user_feedback
+      FROM ia_agents_log
       WHERE ${conditions.join(' AND ')}
-      ORDER BY data_hora DESC
+      ORDER BY timestamp DESC
       LIMIT ${limit}
     `;
 
@@ -182,16 +182,16 @@ export class ConversationLogger {
   async getStats(agent: string, tenantId: string, days: number = 30): Promise<any> {
     const sql = `
       SELECT
-        count() as total_mensagens,
-        countDistinct(conversa_id) as total_conversas,
-        avg(tempo_resposta_ms) as tempo_medio_resposta,
-        countIf(tem_erro = 1) as erros,
-        avg(avaliacao_usuario) as avaliacao_media,
-        topK(10)(pergunta_usuario) as perguntas_frequentes
-      FROM ia_log_agentes
-      WHERE agente = '${agent}'
+        count() as total_messages,
+        countDistinct(conversation_id) as total_conversations,
+        avg(response_time_ms) as avg_response_time,
+        countIf(has_error = 1) as errors,
+        avg(user_rating) as avg_rating,
+        topK(10)(user_question) as top_questions
+      FROM ia_agents_log
+      WHERE agent = '${agent}'
         AND tenant_id = '${tenantId}'
-        AND data >= today() - INTERVAL ${days} DAY
+        AND date >= today() - INTERVAL ${days} DAY
     `;
 
     const result = await this.clickhouse.query(sql, { tenantId, userEmail: '' });

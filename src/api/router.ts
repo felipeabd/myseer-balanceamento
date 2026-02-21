@@ -137,60 +137,65 @@ export function createIrisRouter(agent: IrisAgent): Router {
   /**
    * GET /conversations
    * List conversations for the current tenant/user.
+   * Returns summaries (title, lastMessage) from ClickHouse.
    */
-  router.get('/conversations', (req: Request, res: Response) => {
-    const manager = agent.getConversationManager();
-    const convs = manager.listByUser(req.tenant!.tenantId, req.tenant!.userEmail);
-
-    const formatted = convs
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-      .map(c => {
-        const firstUserMsg = c.messages.find(m => m.role === 'user');
-        const lastAssistantMsg = [...c.messages].reverse().find(m => m.role === 'assistant');
-        const title = extractText(firstUserMsg?.content ?? '').substring(0, 60) || 'Nova conversa';
-        const lastMessage = extractText(lastAssistantMsg?.content ?? '').substring(0, 100);
-        return { id: c.id, title, lastMessage, updatedAt: c.updatedAt };
-      });
-
-    res.json({ conversations: formatted });
+  router.get('/conversations', async (req: Request, res: Response) => {
+    try {
+      const manager = agent.getConversationManager();
+      const conversations = await manager.listByUser(req.tenant!.tenantId, req.tenant!.userEmail);
+      res.json({ conversations });
+    } catch (err) {
+      console.error('[Iris] Conversations list error:', err);
+      res.status(500).json({ error: 'Failed to list conversations' });
+    }
   });
 
   /**
    * GET /conversations/:id
    * Get a single conversation with full message history.
    */
-  router.get('/conversations/:id', (req: Request, res: Response) => {
-    const manager = agent.getConversationManager();
-    const conv = manager.get(req.params['id'] as string);
+  router.get('/conversations/:id', async (req: Request, res: Response) => {
+    try {
+      const manager = agent.getConversationManager();
+      const conv = await manager.get(req.params['id'] as string);
 
-    if (!conv || conv.tenantId !== req.tenant!.tenantId) {
-      res.status(404).json({ error: 'Conversa não encontrada' });
-      return;
+      if (!conv || conv.tenantId !== req.tenant!.tenantId) {
+        res.status(404).json({ error: 'Conversa não encontrada' });
+        return;
+      }
+
+      const firstUserMsg = conv.messages.find(m => m.role === 'user');
+      const lastAssistantMsg = [...conv.messages].reverse().find(m => m.role === 'assistant');
+      const title = extractText(firstUserMsg?.content ?? '').substring(0, 60) || 'Nova conversa';
+      const lastMessage = extractText(lastAssistantMsg?.content ?? '').substring(0, 100);
+
+      const messages = conv.messages.map((m, i) => ({
+        id: `${conv.id}-${i}`,
+        role: m.role,
+        content: extractText(m.content),
+        timestamp: m.timestamp,
+      }));
+
+      res.json({ id: conv.id, title, lastMessage, updatedAt: conv.updatedAt, messages });
+    } catch (err) {
+      console.error('[Iris] Conversation detail error:', err);
+      res.status(500).json({ error: 'Failed to get conversation' });
     }
-
-    const firstUserMsg = conv.messages.find(m => m.role === 'user');
-    const lastAssistantMsg = [...conv.messages].reverse().find(m => m.role === 'assistant');
-    const title = extractText(firstUserMsg?.content ?? '').substring(0, 60) || 'Nova conversa';
-    const lastMessage = extractText(lastAssistantMsg?.content ?? '').substring(0, 100);
-
-    const messages = conv.messages.map((m, i) => ({
-      id: `${conv.id}-${i}`,
-      role: m.role,
-      content: extractText(m.content),
-      timestamp: m.timestamp,
-    }));
-
-    res.json({ id: conv.id, title, lastMessage, updatedAt: conv.updatedAt, messages });
   });
 
   /**
    * DELETE /conversations/:id
-   * Delete a conversation.
+   * Delete a conversation (soft-delete in ClickHouse).
    */
-  router.delete('/conversations/:id', (req: Request, res: Response) => {
-    const manager = agent.getConversationManager();
-    const deleted = manager.delete(req.params['id'] as string);
-    res.json({ deleted });
+  router.delete('/conversations/:id', async (req: Request, res: Response) => {
+    try {
+      const manager = agent.getConversationManager();
+      const deleted = await manager.delete(req.params['id'] as string);
+      res.json({ deleted });
+    } catch (err) {
+      console.error('[Iris] Conversation delete error:', err);
+      res.status(500).json({ error: 'Failed to delete conversation' });
+    }
   });
 
   /**

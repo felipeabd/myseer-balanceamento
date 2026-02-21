@@ -62,7 +62,7 @@ export class IrisAgent {
     this.anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
     this.model = config.anthropicModel ?? 'claude-haiku-4-5-20251001';
     this.clickhouse = new ClickHouseService(config.clickhouse);
-    this.conversations = new ConversationManager();
+    this.conversations = new ConversationManager(this.clickhouse);
     this.rules = config.rules ?? [];
     this.maxToolCalls = config.maxToolCalls ?? 3;
     this.usageTracker = new UsageTracker(this.clickhouse);
@@ -176,7 +176,7 @@ export class IrisAgent {
     agentSlug?: string
   ): Promise<{ conversationId: string; response: string }> {
 
-    const conv = this.conversations.getOrCreate(conversationId, tenant);
+    const conv = await this.conversations.getOrCreate(conversationId, tenant);
 
     // ========== RULE TRAINING MODE DETECTION ==========
     // 1. Check if user wants to enter training mode (explicit command)
@@ -414,7 +414,7 @@ export class IrisAgent {
     agentSlug?: string
   ): Promise<{ conversationId: string }> {
 
-    const conv = this.conversations.getOrCreate(conversationId, tenant);
+    const conv = await this.conversations.getOrCreate(conversationId, tenant);
 
     // ========== RULE TRAINING MODE DETECTION ==========
     // 1. Check if user wants to enter training mode (explicit command)
