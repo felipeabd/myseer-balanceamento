@@ -92,6 +92,21 @@ export interface AgentAnalytics {
   }>;
 }
 
+export interface RuleRecord {
+  id: string;
+  tenant: string;
+  tipo: string;
+  status: string;
+  prioridade: number;
+  alvo: string;
+  condicao: string;
+  acao: string;
+  texto: string;
+  criadoPor: string;
+  criadoEm: string;
+  vezesAplicada: number;
+}
+
 export class BuilderApiService {
   private userEmail: string;
 
@@ -195,6 +210,37 @@ export class BuilderApiService {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     return data.columns;
+  }
+
+  // ── Analytics ───────────────────────────────────────────
+
+  // ── Rules Management ────────────────────────────────────
+
+  async listRules(params: { tenant?: string; tipo?: string; status?: string } = {}): Promise<{ rules: RuleRecord[]; tenants: string[] }> {
+    const qs = new URLSearchParams();
+    if (params.tenant) qs.set('tenant', params.tenant);
+    if (params.tipo) qs.set('tipo', params.tipo);
+    if (params.status) qs.set('status', params.status);
+    const res = await fetch(`${API_BASE_URL}/api/builder/rules?${qs}`, { headers: this.getHeaders() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async toggleRuleStatus(id: string, status: 'ativo' | 'inativo'): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/builder/rules/${id}/toggle`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  }
+
+  async deleteRule(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/builder/rules/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
   }
 
   // ── Analytics ───────────────────────────────────────────

@@ -15,6 +15,7 @@ import { generateCsv } from '../csv/csv-generator';
 import { AgentRegistry } from '../builder/agent-registry';
 import { SummaryGenerator, formatSummariesForPrompt } from '../conversation/summary-generator';
 import { ProfileManager, formatProfileForPrompt } from '../conversation/profile-manager';
+import { RulesManager } from '../rules/rules-manager';
 import {
   IrisConfig,
   TenantContext,
@@ -46,6 +47,7 @@ export class IrisAgent {
   private agentRegistry: AgentRegistry;
   private summaryGenerator: SummaryGenerator;
   private profileManager: ProfileManager;
+  private rulesManager: RulesManager;
 
   private readonly LEGACY_AGENT_NAME = 'iris';
 
@@ -81,6 +83,7 @@ export class IrisAgent {
     this.agentRegistry = new AgentRegistry(this.clickhouse);
     this.summaryGenerator = new SummaryGenerator(this.clickhouse, this.anthropic);
     this.profileManager = new ProfileManager(this.clickhouse, this.anthropic);
+    this.rulesManager = new RulesManager(this.clickhouse);
   }
 
   /** Get usage tracker instance */
@@ -116,6 +119,11 @@ export class IrisAgent {
   /** Get agent registry instance */
   getAgentRegistry(): AgentRegistry {
     return this.agentRegistry;
+  }
+
+  /** Get rules manager instance */
+  getRulesManager(): RulesManager {
+    return this.rulesManager;
   }
 
   // ── Agent Resolution ──────────────────────────────────────

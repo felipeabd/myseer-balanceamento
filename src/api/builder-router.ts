@@ -344,5 +344,66 @@ export function createBuilderRouter(agent: IrisAgent): Router {
     }
   });
 
+  // ── Rules Management ────────────────────────────────────
+
+  /**
+   * GET /rules?tenant=&tipo=&status=
+   * List business rules with optional filters.
+   */
+  router.get('/rules', async (req: Request, res: Response) => {
+    try {
+      const rulesManager = agent.getRulesManager();
+      const filter = {
+        tenant: req.query.tenant as string | undefined,
+        tipo: req.query.tipo as string | undefined,
+        status: req.query.status as string | undefined,
+      };
+      const [rules, tenants] = await Promise.all([
+        rulesManager.listRules(filter),
+        rulesManager.listTenantsWithRules(),
+      ]);
+      res.json({ rules, tenants });
+    } catch (error) {
+      console.error('[Builder] List rules error:', error);
+      res.status(500).json({ error: 'Failed to list rules' });
+    }
+  });
+
+  /**
+   * PUT /rules/:id/toggle
+   * Toggle rule status between ativo and inativo.
+   * Body: { status: 'ativo' | 'inativo' }
+   */
+  router.put('/rules/:id/toggle', async (req: Request, res: Response) => {
+    try {
+      const { status } = req.body as { status: 'ativo' | 'inativo' };
+      if (status !== 'ativo' && status !== 'inativo') {
+        res.status(400).json({ error: 'status deve ser "ativo" ou "inativo"' });
+        return;
+      }
+      const rulesManager = agent.getRulesManager();
+      await rulesManager.toggleStatus(req.params.id as string, status);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('[Builder] Toggle rule error:', error);
+      res.status(500).json({ error: 'Failed to toggle rule' });
+    }
+  });
+
+  /**
+   * DELETE /rules/:id
+   * Permanently delete a rule.
+   */
+  router.delete('/rules/:id', async (req: Request, res: Response) => {
+    try {
+      const rulesManager = agent.getRulesManager();
+      await rulesManager.deleteRule(req.params.id as string);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('[Builder] Delete rule error:', error);
+      res.status(500).json({ error: 'Failed to delete rule' });
+    }
+  });
+
   return router;
 }

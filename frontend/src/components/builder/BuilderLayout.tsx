@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BuilderApiService, type AgentDefinitionFull } from '../../services/builder-api';
 import { AgentEditor } from './AgentEditor';
+import { RulesPanel } from './RulesPanel';
 
 interface BuilderLayoutProps {
   userEmail: string;
@@ -11,6 +12,7 @@ export function BuilderLayout({ userEmail, onExit }: BuilderLayoutProps) {
   const [api] = useState(() => new BuilderApiService(userEmail));
   const [agents, setAgents] = useState<AgentDefinitionFull[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [view, setView] = useState<'agents' | 'rules'>('agents');
   const [loading, setLoading] = useState(true);
 
   const loadAgents = async () => {
@@ -93,19 +95,46 @@ export function BuilderLayout({ userEmail, onExit }: BuilderLayoutProps) {
           </button>
         </div>
 
-        {/* New agent button */}
-        <div className="px-3 pt-3 pb-2">
+        {/* Nav buttons */}
+        <div className="px-3 pt-3 pb-2 flex gap-2">
+          <button
+            onClick={() => { setView('agents'); }}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              view === 'agents'
+                ? 'text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+            }`}
+            style={view === 'agents' ? { background: 'linear-gradient(135deg, #28B8CE 0%, #2A81B8 50%, #494495 100%)' } : {}}
+          >
+            Agentes
+          </button>
+          <button
+            onClick={() => { setView('rules'); setSelectedAgentId(null); }}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              view === 'rules'
+                ? 'text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+            }`}
+            style={view === 'rules' ? { background: 'linear-gradient(135deg, #28B8CE 0%, #2A81B8 50%, #494495 100%)' } : {}}
+          >
+            Regras
+          </button>
+        </div>
+
+        {/* New agent button (only in agents view) */}
+        {view === 'agents' && (
+        <div className="px-3 pb-2">
           <button
             onClick={handleNewAgent}
-            className="w-full rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors"
-            style={{ background: 'linear-gradient(135deg, #28B8CE 0%, #2A81B8 50%, #494495 100%)' }}
+            className="w-full rounded-lg px-3 py-2 text-sm font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 transition-colors"
           >
             + Novo Agente
           </button>
         </div>
+        )}
 
-        {/* Agent list */}
-        <div className="flex-1 overflow-y-auto px-2 pb-2">
+        {/* Agent list (only in agents view) */}
+        <div className={`flex-1 overflow-y-auto px-2 pb-2 ${view === 'rules' ? 'hidden' : ''}`}>
           {loading ? (
             <p className="p-4 text-center text-xs text-gray-400">Carregando...</p>
           ) : agents.length === 0 ? (
@@ -146,9 +175,11 @@ export function BuilderLayout({ userEmail, onExit }: BuilderLayoutProps) {
         </div>
       </div>
 
-      {/* Main content - Agent editor */}
+      {/* Main content */}
       <div className="flex-1 overflow-hidden">
-        {selectedAgent ? (
+        {view === 'rules' ? (
+          <RulesPanel api={api} />
+        ) : selectedAgent ? (
           <AgentEditor
             key={`${selectedAgent.id}-${selectedAgent.versao}`}
             agent={selectedAgent}
